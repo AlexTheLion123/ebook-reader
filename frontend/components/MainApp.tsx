@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Loader2, Bell, BookOpen } from 'lucide-react';
 import { listBooks } from '../services/backendService';
 import { BookRecommendation, BookDetails } from '../types';
@@ -12,9 +11,6 @@ interface MainAppProps {
 }
 
 export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
-  const navigate = useNavigate();
-  const { bookId, chapter } = useParams<{ bookId?: string; chapter?: string }>();
-  
   const [query, setQuery] = useState(initialQuery);
   const [books, setBooks] = useState<BookRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,54 +68,21 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     };
     
     setSelectedBook(details);
-    navigate(`/books/${bookId}`);
   };
 
   const handleStartReading = (chapterIndex: number) => {
     setReadingChapterIndex(chapterIndex);
     setIsReading(true);
-    if (selectedBook?.id) {
-      navigate(`/books/${selectedBook.id}/read/${chapterIndex + 1}`);
-    }
   };
 
   const handleCloseReader = () => {
     setIsReading(false);
     // Keep selectedBook so we go back to book details, not the main list
-    if (selectedBook?.id) {
-      navigate(`/books/${selectedBook.id}`);
-    } else {
-      navigate('/books');
-    }
   };
 
   useEffect(() => {
     fetchBooks();
   }, []);
-
-  // Handle URL parameters to restore book/reading state
-  useEffect(() => {
-    if (bookId && books.length > 0) {
-      const book = books.find(b => (b as any).id === bookId);
-      if (book) {
-        const details: BookDetails = {
-          ...book,
-          longDescription: "This is an uploaded textbook.",
-          chapters: ["Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5"],
-          id: bookId
-        };
-        setSelectedBook(details);
-        
-        if (chapter) {
-          const chapterIndex = parseInt(chapter) - 1;
-          if (!isNaN(chapterIndex) && chapterIndex >= 0) {
-            setReadingChapterIndex(chapterIndex);
-            setIsReading(true);
-          }
-        }
-      }
-    }
-  }, [bookId, chapter, books]); 
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

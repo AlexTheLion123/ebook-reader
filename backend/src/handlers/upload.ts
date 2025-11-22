@@ -10,7 +10,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'bookId and fileName required' }) };
     }
 
-    const bucket = process.env.PDF_BUCKET!;
+    const bucket = process.env.BOOKS_BUCKET!;
     const key = `${bookId}/${fileName}`;
     const uploadUrl = await getUploadUrl(bucket, key);
 

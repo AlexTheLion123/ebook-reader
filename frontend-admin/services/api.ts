@@ -1,4 +1,7 @@
 import { API_ENDPOINTS } from '../constants';
+import { FrontendBook } from '../types';
+
+const FRONTEND_API_BASE = 'https://uh999me2ye.execute-api.eu-west-1.amazonaws.com/prod';
 
 export const getPresignedUrl = async (bookId: string, fileName: string, metadata: { title: string, author: string, description: string, subject?: string }): Promise<string> => {
   console.log(`[getPresignedUrl] Requesting URL for bookId: ${bookId}, fileName: ${fileName}`);
@@ -75,3 +78,48 @@ export const uploadFileToS3 = async (url: string, file: File, onProgress?: (prog
     xhr.send(file);
   });
 };
+
+// Fetch books visible on the frontend (same endpoint as frontend uses)
+export const listFrontendBooks = async (): Promise<FrontendBook[]> => {
+  try {
+    console.log('[listFrontendBooks] Fetching books...');
+    const response = await fetch(`${FRONTEND_API_BASE}/books`);
+    if (!response.ok) {
+      throw new Error(`Failed to list books: ${response.statusText}`);
+    }
+    const data = await response.json();
+    console.log('[listFrontendBooks] Response data:', data);
+    
+    if (Array.isArray(data)) {
+        return data;
+    }
+    
+    if (data && Array.isArray(data.books)) {
+        return data.books;
+    }
+
+    console.warn('[listFrontendBooks] Unexpected response format, returning empty array');
+    return [];
+  } catch (error) {
+    console.error('Error listing frontend books:', error);
+    throw error;
+  }
+};
+
+// Delete a book from the backend (requires implementing backend endpoint)
+export const deleteBook = async (bookId: string): Promise<void> => {
+  try {
+    const response = await fetch(`${FRONTEND_API_BASE}/books/${bookId}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete book: ${response.statusText} - ${errorText}`);
+    }
+  } catch (error) {
+    console.error('Error deleting book:', error);
+    throw error;
+  }
+};
+

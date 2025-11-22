@@ -45,6 +45,14 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #3f3f46;
       }
+      /* Override autofill background */
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus,
+      input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 30px #09090b inset !important;
+        -webkit-text-fill-color: #d4d4d8 !important;
+      }
     </style>
   <script type="importmap">
 {

@@ -1,0 +1,11 @@
+{
+  "LambdaFunctionConfigurations": [{
+    "LambdaFunctionArn": "arn:aws:lambda:eu-west-1:666784298093:function:textbook-study-buddy-ProcessPdfFunction-iXDVYCWGuJW4",
+    "Events": ["s3:ObjectCreated:*"],
+    "Filter": {
+      "Key": {
+        "FilterRules": [{"Name": "suffix", "Value": ".pdf"}]
+      }
+    }
+  }]
+}
