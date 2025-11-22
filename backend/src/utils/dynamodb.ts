@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
 const client = new DynamoDBClient({});
 export const docClient = DynamoDBDocumentClient.from(client);
@@ -23,6 +23,16 @@ export const queryItems = async (tableName: string, pk: string, skPrefix?: strin
   return result.Items || [];
 };
 
+export const query = async (tableName: string, keyCondition: string, values: any) => {
+  const params = {
+    TableName: tableName,
+    KeyConditionExpression: keyCondition,
+    ExpressionAttributeValues: values
+  };
+  const result = await docClient.send(new QueryCommand(params));
+  return result.Items || [];
+};
+
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 export const queryByType = async (tableName: string, type: string) => {
@@ -35,4 +45,14 @@ export const queryByType = async (tableName: string, type: string) => {
   };
   const result = await docClient.send(new QueryCommand(params));
   return result.Items || [];
+};
+
+export const updateItem = async (tableName: string, key: any, updateExpression: string, expressionAttributeValues: any, expressionAttributeNames?: any) => {
+  await docClient.send(new UpdateCommand({
+    TableName: tableName,
+    Key: key,
+    UpdateExpression: updateExpression,
+    ExpressionAttributeValues: expressionAttributeValues,
+    ExpressionAttributeNames: expressionAttributeNames
+  }));
 };

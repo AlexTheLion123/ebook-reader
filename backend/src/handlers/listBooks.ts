@@ -3,7 +3,10 @@ import { queryByType } from '../utils/dynamodb';
 
 export const handler: APIGatewayProxyHandler = async () => {
   try {
-    const books = await queryByType(process.env.CONTENT_TABLE!, 'book');
+    const allBooks = await queryByType(process.env.CONTENT_TABLE!, 'book');
+    
+    // Only return books that have successfully completed processing
+    const books = allBooks.filter(book => book.processingStatus === 'success');
     
     return {
       statusCode: 200,

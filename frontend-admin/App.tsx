@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Book, FrontendBook, ToastMessage, UploadStatus } from './types';
 import { getPresignedUrl, uploadFileToS3, listFrontendBooks, deleteBook } from './services/api';
+import { API_ENDPOINTS } from './constants';
 import UploadZone from './components/UploadZone';
 import BookList from './components/BookList';
 import LibraryList from './components/LibraryList';
@@ -85,24 +86,42 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
 
-  // Mock Polling Logic for Processing State
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setUploadedBooks(prev => prev.map(book => {
-        if (book.status === 'processing' && book.processingStartedAt) {
-          const startTime = new Date(book.processingStartedAt).getTime();
-          const now = Date.now();
-          
-          // Mock processing time of 10 seconds
-          if (now - startTime > 10000) {
-            return { ...book, status: 'success' };
-          }
+  const checkBookStatus = async (bookId: string) => {
+    const response = await fetch(`${API_ENDPOINTS.UPLOAD_INIT.replace('/upload', '')}/books/${bookId}/status`);
+    return await response.json();
+  };
+
+  const pollBookStatus = async (bookId: string) => {
+    const maxAttempts = 60; // 5 minutes (60 * 5 seconds)
+    let attempts = 0;
+    
+    const interval = setInterval(async () => {
+      attempts++;
+      
+      try {
+        const { status, error } = await checkBookStatus(bookId);
+        
+        if (status === 'success') {
+          clearInterval(interval);
+          addToast('success', 'Book processing complete!');
+          setUploadedBooks(prev => prev.map(b => 
+            b.bookId === bookId ? { ...b, status: 'success' } : b
+          ));
+        } else if (status === 'failed') {
+          clearInterval(interval);
+          addToast('error', `Processing failed: ${error || 'Unknown error'}`);
+          setUploadedBooks(prev => prev.map(b => 
+            b.bookId === bookId ? { ...b, status: 'error' } : b
+          ));
+        } else if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          addToast('error', 'Processing timeout - check logs');
         }
-        return book;
-      }));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+      } catch (err) {
+        console.error('Status check failed:', err);
+      }
+    }, 5000);
+  };
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -183,6 +202,9 @@ const App: React.FC = () => {
           ? { ...b, status: 'processing', processingStartedAt } 
           : b
       ));
+
+      // Start polling
+      pollBookStatus(form.bookId);
       
       // Reset after short delay
       setTimeout(() => {
@@ -466,6 +488,7 @@ const App: React.FC = () => {
             <LibraryList 
               books={filteredBooks} 
               onHide={handleRequestHide}
+              onToast={addToast}
             />
           </div>
 

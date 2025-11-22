@@ -1,5 +1,5 @@
 import { TextractClient, StartDocumentAnalysisCommand, GetDocumentAnalysisCommand, Block } from '@aws-sdk/client-textract';
-import { putItem } from './dynamodb';
+import { putItem, updateItem } from './dynamodb';
 
 const textract = new TextractClient({});
 
@@ -14,11 +14,20 @@ export async function processPdfAndStore(
   bookId: string,
   tableName: string
 ): Promise<ProcessPdfResult> {
-  // Start Textract analysis
-  const startCommand = new StartDocumentAnalysisCommand({
-    DocumentLocation: { S3Object: { Bucket: bucket, Name: s3Key } },
-    FeatureTypes: ['LAYOUT']
-  });
+  try {
+    // Update status to processing
+    await updateItem(
+      tableName,
+      { PK: `book#${bookId}`, SK: 'metadata' },
+      'SET processingStatus = :status, processingStartedAt = :time',
+      { ':status': 'processing', ':time': Date.now() }
+    );
+
+    // Start Textract analysis
+    const startCommand = new StartDocumentAnalysisCommand({
+      DocumentLocation: { S3Object: { Bucket: bucket, Name: s3Key } },
+      FeatureTypes: ['LAYOUT']
+    });
   
   const { JobId } = await textract.send(startCommand);
   
@@ -52,68 +61,56 @@ export async function processPdfAndStore(
     throw new Error(`Textract job failed or timed out. Status: ${status}`);
   }
   
-  // Extract structured content
+  // Extract structured content by page
   const lines = blocks.filter(b => b.BlockType === 'LINE');
-  let currentChapter = 1;
-  let paragraphNum = 1;
-  let chaptersProcessed = 0;
-  let paragraphsProcessed = 0;
-  let buffer = '';
+  const pageMap = new Map<number, string>();
   
+  // Group lines by page
   for (const line of lines) {
+    const pageNum = line.Page || 1;
     const text = line.Text || '';
-    const chapterMatch = text.match(/^Chapter\s+(\d+)/i);
-    
-    if (chapterMatch) {
-      // Store previous paragraph
-      if (buffer.trim()) {
-        await putItem(tableName, {
-          PK: `book#${bookId}`,
-          SK: `chapter#${currentChapter}#paragraph#${paragraphNum}`,
-          type: 'content',
-          chapterNumber: currentChapter,
-          paragraphNumber: paragraphNum,
-          paragraphText: buffer.trim()
-        });
-        paragraphsProcessed++;
-      }
-      
-      currentChapter = parseInt(chapterMatch[1]);
-      paragraphNum = 1;
-      buffer = text + '\n';
-      chaptersProcessed++;
-    } else {
-      buffer += text + '\n';
-      
-      // Store paragraph every ~500 chars
-      if (buffer.length > 500) {
-        await putItem(tableName, {
-          PK: `book#${bookId}`,
-          SK: `chapter#${currentChapter}#paragraph#${paragraphNum}`,
-          type: 'content',
-          chapterNumber: currentChapter,
-          paragraphNumber: paragraphNum,
-          paragraphText: buffer.trim()
-        });
-        paragraphsProcessed++;
-        paragraphNum++;
-        buffer = '';
-      }
-    }
+    const existing = pageMap.get(pageNum) || '';
+    pageMap.set(pageNum, existing + text + '\n');
   }
   
-  // Store final paragraph
-  if (buffer.trim()) {
+  // Store each page as a paragraph
+  let paragraphsProcessed = 0;
+  for (const [pageNum, content] of Array.from(pageMap.entries()).sort((a, b) => a[0] - b[0])) {
     await putItem(tableName, {
       PK: `book#${bookId}`,
-      SK: `chapter#${currentChapter}#paragraph#${paragraphNum}`,
+      SK: `chapter#1#paragraph#${pageNum}`,
       type: 'content',
-      chapterNumber: currentChapter,
-      paragraphNumber: paragraphNum,
-      paragraphText: buffer.trim()
+      chapterNumber: 1,
+      paragraphNumber: pageNum,
+      pageNumber: pageNum,
+      paragraphText: content.trim()
     });
     paragraphsProcessed++;
   }
   
-  return { chaptersProcessed: chaptersProcessed || 1, paragraphsProcessed };
+    // Update status to success
+    await updateItem(
+      tableName,
+      { PK: `book#${bookId}`, SK: 'metadata' },
+      'SET processingStatus = :status, processingCompletedAt = :time, chaptersProcessed = :cp, paragraphsProcessed = :pp',
+      {
+        ':status': 'success',
+        ':time': Date.now(),
+        ':cp': 1,
+        ':pp': paragraphsProcessed
+      }
+    );
+
+    return { chaptersProcessed: 1, paragraphsProcessed };
+  } catch (error: any) {
+    // Update status to failed
+    await putItem(tableName, {
+      PK: `book#${bookId}`,
+      SK: 'metadata',
+      processingStatus: 'failed',
+      processingError: error.message,
+      processingFailedAt: Date.now()
+    });
+    throw error;
+  }
 }

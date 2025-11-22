@@ -216,6 +216,56 @@ Resources:
             Path: /books
             Method: get
 
+  BookStatusFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/bookStatus.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TextbookContentTable
+      Events:
+        GetStatus:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /books/{bookId}/status
+            Method: get
+
+  ReprocessFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/reprocess.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TextbookContentTable
+          BUCKET_NAME: !Ref TextbookPDFBucket
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref TextbookPDFBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+      Events:
+        Reprocess:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /books/{bookId}/reprocess
+            Method: post
+
   ProcessPdfFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -249,37 +299,7 @@ Resources:
       Principal: s3.amazonaws.com
       SourceArn: !GetAtt TextbookPDFBucket.Arn
 
-  ReprocessPdfFunction:
-    Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Minify: true
-        Target: "es2020"
-        Sourcemap: true
-    Properties:
-      CodeUri: ./
-      Handler: src/handlers/reprocessPdf.handler
-      Timeout: 900
-      MemorySize: 1024
-      Policies:
-        - S3ReadPolicy:
-            BucketName: !Ref TextbookPDFBucket
-        - DynamoDBCrudPolicy:
-            TableName: !Ref TextbookContentTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - textract:StartDocumentAnalysis
-                - textract:GetDocumentAnalysis
-              Resource: '*'
-      Events:
-        Reprocess:
-          Type: Api
-          Properties:
-            RestApiId: !Ref TextbookApi
-            Path: /reprocess
-            Method: post
+
 
 Outputs:
   ApiEndpoint:

@@ -25,7 +25,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       description: description || 'Uploaded PDF Textbook',
       subject: subject || '',
       s3Key: key,
-      uploadedAt: Date.now()
+      uploadedAt: Date.now(),
+      processingStatus: 'pending'
     });
 
     return {

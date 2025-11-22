@@ -123,3 +123,29 @@ export const deleteBook = async (bookId: string): Promise<void> => {
   }
 };
 
+export const reprocessBook = async (bookId: string): Promise<{ message: string; bookId: string; status: string }> => {
+  const response = await fetch(`${API_ENDPOINTS.BOOKS}/${bookId}/reprocess`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to start reprocessing');
+  }
+
+  return response.json();
+};
+
+export const getBookStatus = async (bookId: string): Promise<{ status: string }> => {
+  const response = await fetch(`${API_ENDPOINTS.BOOKS}/${bookId}/status`);
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch book status');
+  }
+
+  return response.json();
+};
+

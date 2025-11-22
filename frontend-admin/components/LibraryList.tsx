@@ -1,13 +1,15 @@
 import React from 'react';
 import { FrontendBook } from '../types';
 import { Library, EyeOff } from 'lucide-react';
+import ReprocessButton from './ReprocessButton';
 
 interface LibraryListProps {
   books: FrontendBook[];
   onHide: (book: FrontendBook) => void;
+  onToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-const LibraryList: React.FC<LibraryListProps> = ({ books, onHide }) => {
+const LibraryList: React.FC<LibraryListProps> = ({ books, onHide, onToast }) => {
   if (books.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-zinc-500 border border-dashed border-zinc-800 rounded-lg bg-zinc-900/20">
@@ -53,13 +55,20 @@ const LibraryList: React.FC<LibraryListProps> = ({ books, onHide }) => {
                   <span className="line-clamp-2 max-w-[200px]">{book.description || 'No description'}</span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => onHide(book)}
-                    className="inline-flex items-center justify-center p-2 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                    title="Hide from library"
-                  >
-                    <EyeOff size={16} />
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    <ReprocessButton 
+                      bookId={book.bookId} 
+                      bookTitle={book.title} 
+                      onToast={onToast} 
+                    />
+                    <button
+                      onClick={() => onHide(book)}
+                      className="inline-flex items-center justify-center p-2 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      title="Hide from library"
+                    >
+                      <EyeOff size={16} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             );
