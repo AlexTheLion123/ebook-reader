@@ -1,0 +1,5 @@
+{
+  "name": "Textbook Admin",
+  "description": "A minimal, dark-mode admin dashboard for managing and uploading textbooks with drag-and-drop functionality.",
+  "requestFramePermissions": []
+}
