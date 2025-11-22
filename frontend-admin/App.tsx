@@ -17,6 +17,7 @@ const App: React.FC = () => {
     bookId: crypto.randomUUID(),
     title: '',
     author: '',
+    description: '',
     subject: ''
   });
 
@@ -54,6 +55,7 @@ const App: React.FC = () => {
       bookId: crypto.randomUUID(),
       title: '',
       author: '',
+      description: '',
       subject: ''
     });
     setSelectedFile(null);
@@ -62,11 +64,19 @@ const App: React.FC = () => {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !form.title) {
-      addToast('error', 'Please select a file and enter a title.');
+    console.log('[App] handleUpload called');
+    if (!selectedFile || !form.title || !form.author || !form.description || !form.subject) {
+      console.warn('[App] Missing required fields', { selectedFile, form });
+      addToast('error', 'Please fill in all required fields (Title, Author, Subject, Description, File).');
       return;
     }
 
+    if (form.description.length < 20 || form.description.length > 200) {
+      addToast('error', 'Description must be between 20 and 200 characters.');
+      return;
+    }
+
+    console.log('[App] Starting upload process', { form, fileName: selectedFile.name });
     setUploadStatus('uploading');
     setProgress(0);
 
@@ -83,10 +93,22 @@ const App: React.FC = () => {
     try {
       // 1. Get Presigned URL
       addToast('info', 'Initializing upload...');
-      const uploadUrl = await getPresignedUrl(form.bookId, selectedFile.name);
+      console.log('[App] Calling getPresignedUrl...');
+      const uploadUrl = await getPresignedUrl(form.bookId, selectedFile.name, {
+        title: form.title,
+        author: form.author,
+        description: form.description,
+        subject: form.subject
+      });
+      console.log('[App] Received uploadUrl');
 
       // 2. Upload File
-      await uploadFileToS3(uploadUrl, selectedFile, (pct) => setProgress(pct));
+      console.log('[App] Calling uploadFileToS3...');
+      await uploadFileToS3(uploadUrl, selectedFile, (pct) => {
+        // console.log(`[App] Upload progress: ${pct}%`);
+        setProgress(pct);
+      });
+      console.log('[App] Upload completed successfully');
 
       // 3. Success
       setUploadStatus('success');
@@ -97,13 +119,13 @@ const App: React.FC = () => {
       
       // Reset after short delay
       setTimeout(() => {
+        console.log('[App] Resetting form');
         resetForm();
-      }, 1500);
-
-    } catch (error: any) {
-      console.error(error);
+      }, 2000);
+    } catch (error) {
+      console.error('[App] Upload failed:', error);
       setUploadStatus('error');
-      addToast('error', error.message || 'Upload failed.');
+      addToast('error', 'Upload failed. Please try again.');
       
       // Update status in list
       setUploadedBooks(prev => prev.map(b => b.bookId === form.bookId ? { ...b, status: 'error' } : b));
@@ -181,29 +203,53 @@ const App: React.FC = () => {
                 {/* Grid for Author/Subject */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Author</label>
+                    <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Author <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       name="author"
                       value={form.author}
                       onChange={handleFormChange}
                       disabled={uploadStatus === 'uploading'}
-                      placeholder="Optional"
+                      placeholder="e.g. John Doe"
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-700 placeholder:text-zinc-700"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Subject</label>
+                    <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Subject <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       name="subject"
                       value={form.subject}
                       onChange={handleFormChange}
                       disabled={uploadStatus === 'uploading'}
-                      placeholder="Optional"
+                      placeholder="e.g. Computer Science"
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-700 placeholder:text-zinc-700"
                     />
                   </div>
+                </div>
+
+                {/* Short Description */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Short Description <span className="text-red-500">*</span></label>
+                    <span className={`text-xs ${form.description.length > 200 ? 'text-red-500' : 'text-zinc-500'}`}>
+                      {form.description.length}/200
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    name="description"
+                    value={form.description}
+                    onChange={handleFormChange}
+                    disabled={uploadStatus === 'uploading'}
+                    minLength={20}
+                    maxLength={200}
+                    placeholder="e.g. A comprehensive guide..."
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-700 placeholder:text-zinc-700"
+                  />
+                  <p className="text-xs text-zinc-600">
+                    Keep it concise for the card view (20-200 chars).
+                  </p>
                 </div>
 
                 {/* Upload Zone */}

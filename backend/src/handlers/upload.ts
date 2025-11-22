@@ -4,7 +4,7 @@ import { putItem } from '../utils/dynamodb';
 
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
-    const { bookId, fileName } = JSON.parse(event.body || '{}');
+    const { bookId, fileName, title, author, description, subject } = JSON.parse(event.body || '{}');
     
     if (!bookId || !fileName) {
       return { statusCode: 400, body: JSON.stringify({ error: 'bookId and fileName required' }) };
@@ -18,7 +18,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     await putItem(process.env.CONTENT_TABLE!, {
       PK: `book#${bookId}`,
       SK: 'metadata',
+      type: 'book',
       fileName,
+      title: title || fileName.replace(/\.pdf$/i, ''),
+      author: author || 'Unknown Author',
+      description: description || 'Uploaded PDF Textbook',
+      subject: subject || '',
       s3Key: key,
       uploadedAt: Date.now()
     });

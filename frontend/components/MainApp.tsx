@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Loader2, Bell, BookOpen } from 'lucide-react';
-import { getBookRecommendations, getBookDetails } from '../services/geminiService';
+import { listBooks } from '../services/backendService';
 import { BookRecommendation, BookDetails } from '../types';
 import { BookCard } from './BookCard';
 import { BookDetail } from './BookDetail';
@@ -11,6 +12,9 @@ interface MainAppProps {
 }
 
 export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
+  const navigate = useNavigate();
+  const { bookId, chapter } = useParams<{ bookId?: string; chapter?: string }>();
+  
   const [query, setQuery] = useState(initialQuery);
   const [books, setBooks] = useState<BookRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -24,18 +28,31 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
   const [isReading, setIsReading] = useState(false);
   const [readingChapterIndex, setReadingChapterIndex] = useState(0);
 
-  const fetchBooks = async (searchQuery: string) => {
-    if (!searchQuery.trim()) return;
-    
-    // Reset detail view when searching new books
-    setSelectedBook(null);
-    setIsReading(false);
+  const fetchBooks = async () => {
     setLoading(true);
     try {
-      const results = await getBookRecommendations(searchQuery);
-      setBooks(results);
+      const backendBooks = await listBooks();
+      
+      // Map backend books to BookRecommendation format
+      const mappedBooks: BookRecommendation[] = backendBooks.map(b => {
+        // Extract ID from PK if bookId is missing (PK format: "book#UUID")
+        const id = b.bookId || (b.PK ? b.PK.replace('book#', '') : 'unknown');
+        
+        // Use filename as title if title is missing, removing the .pdf extension
+        const displayTitle = b.title || (b.fileName ? b.fileName.replace(/\.pdf$/i, '') : 'Untitled Book');
+
+        return {
+          title: displayTitle,
+          author: b.author || 'Unknown Author',
+          description: b.description || 'Uploaded PDF Textbook',
+          rating: 5.0,
+          id: id
+        };
+      });
+
+      setBooks(mappedBooks as any);
     } catch (e) {
-      console.error("Search failed", e);
+      console.error("Failed to fetch books", e);
     } finally {
       setLoading(false);
       setHasSearched(true);
@@ -43,40 +60,72 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
   };
 
   const handleBookClick = async (book: BookRecommendation) => {
-    setLoadingDetails(true);
-    try {
-      const details = await getBookDetails(book);
-      if (details) {
-        setSelectedBook(details);
-      }
-    } catch (e) {
-      console.error("Failed to load book details", e);
-    } finally {
-      setLoadingDetails(false);
-    }
+    // For uploaded books, we don't need to fetch details from Gemini.
+    // We just construct a BookDetails object directly.
+    const bookId = (book as any).id;
+    
+    const details: BookDetails = {
+      ...book,
+      longDescription: "This is an uploaded textbook.",
+      chapters: ["Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5"], // Mock chapters for now as we don't have chapter metadata yet
+      id: bookId // Pass the bookId through to BookDetails
+    };
+    
+    setSelectedBook(details);
+    navigate(`/books/${bookId}`);
   };
 
   const handleStartReading = (chapterIndex: number) => {
     setReadingChapterIndex(chapterIndex);
     setIsReading(true);
+    if (selectedBook?.id) {
+      navigate(`/books/${selectedBook.id}/read/${chapterIndex + 1}`);
+    }
   };
 
   const handleCloseReader = () => {
     setIsReading(false);
+    // Keep selectedBook so we go back to book details, not the main list
+    if (selectedBook?.id) {
+      navigate(`/books/${selectedBook.id}`);
+    } else {
+      navigate('/books');
+    }
   };
 
   useEffect(() => {
-    if (initialQuery) {
-      fetchBooks(initialQuery);
-    } else {
-      // Default recommendations if no query provided
-      fetchBooks("popular classic literature");
+    fetchBooks();
+  }, []);
+
+  // Handle URL parameters to restore book/reading state
+  useEffect(() => {
+    if (bookId && books.length > 0) {
+      const book = books.find(b => (b as any).id === bookId);
+      if (book) {
+        const details: BookDetails = {
+          ...book,
+          longDescription: "This is an uploaded textbook.",
+          chapters: ["Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5"],
+          id: bookId
+        };
+        setSelectedBook(details);
+        
+        if (chapter) {
+          const chapterIndex = parseInt(chapter) - 1;
+          if (!isNaN(chapterIndex) && chapterIndex >= 0) {
+            setReadingChapterIndex(chapterIndex);
+            setIsReading(true);
+          }
+        }
+      }
     }
-  }, []); // Run once on mount
+  }, [bookId, chapter, books]); 
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchBooks(query);
+    // For now, search is client-side filtering since we fetch all books
+    // In a real app, we'd call a search endpoint
+    // fetchBooks(query);
   };
 
   // Loading State for Details Overlay
@@ -178,7 +227,7 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
               key={genre}
               onClick={() => {
                 setQuery(genre === 'All Genres' ? '' : genre);
-                fetchBooks(genre === 'All Genres' ? 'popular books' : genre);
+                fetchBooks();
               }}
               className={`whitespace-nowrap px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 border backdrop-blur-sm ${
                 i === 0 

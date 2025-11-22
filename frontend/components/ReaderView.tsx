@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, BookOpen, Type, Minus, Plus, Lightbulb, Sparkles, SkipBack, SkipForward, Bot, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, BookOpen, Type, Minus, Plus, Lightbulb, Sparkles, SkipBack, SkipForward, Bot, X, FileText, AlertTriangle } from 'lucide-react';
 import { BookDetails } from '../types';
-import { getChapterContent } from '../services/geminiService';
+import { getBookContent, askQuestion, summarizeChapter } from '../services/backendService';
 import ReactMarkdown from 'react-markdown';
 
 interface ReaderViewProps {
@@ -33,6 +33,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
     { id: 'init', role: 'ai', text: "Hello! I'm your literary companion. Feel free to ask me about the characters, themes, or plot of this book." }
   ]);
   const [isAiThinking, setIsAiThinking] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,10 +44,30 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
         contentRef.current.scrollTop = 0;
       }
       
-      const chapterTitle = book.chapters[currentChapterIndex];
-      const text = await getChapterContent(book.title, book.author, chapterTitle);
-      setContent(text);
-      setLoading(false);
+      try {
+        // Use the real bookId from the book object
+        const bookId = (book as any).id;
+        if (!bookId) {
+          console.error("No bookId available");
+          setContent("Book ID not found. Cannot load content.");
+          setLoading(false);
+          return;
+        }
+        // Backend expects 1-based chapter index
+        const response = await getBookContent(bookId, currentChapterIndex + 1);
+        
+        if (response.items && response.items.length > 0) {
+          const formattedText = response.items.map(item => item.paragraphText).join('\n\n');
+          setContent(formattedText);
+        } else {
+          setContent("__CONTENT_UNAVAILABLE__");
+        }
+      } catch (error) {
+        console.error("Failed to fetch content", error);
+        setContent("__CONTENT_ERROR__");
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchContent();
@@ -61,17 +82,17 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
 
   const handleNext = () => {
     if (currentChapterIndex < book.chapters.length - 1) {
-      setCurrentChapterIndex(prev => prev + 1);
+      setCurrentChapterIndex(currentChapterIndex + 1);
     }
   };
 
   const handlePrev = () => {
     if (currentChapterIndex > 0) {
-      setCurrentChapterIndex(prev => prev - 1);
+      setCurrentChapterIndex(currentChapterIndex - 1);
     }
   };
 
-  const handleSendChat = (e?: React.FormEvent) => {
+  const handleSendChat = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!chatInput.trim()) return;
 
@@ -80,16 +101,66 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
     setChatInput('');
     setIsAiThinking(true);
 
-    // Mock AI Response
-    setTimeout(() => {
-      const response: ChatMessage = { 
+    try {
+      const bookId = (book as any).id || "test-book-1";
+      const userId = "test-user-1"; // Mock user ID
+      const response = await askQuestion(userId, bookId, newMessage.text);
+      
+      const aiResponse: ChatMessage = { 
         id: (Date.now() + 1).toString(), 
         role: 'ai', 
-        text: "That's a fascinating question! Based on the text, the author seems to be exploring the duality of human nature here, contrasting the protagonist's internal monologue with their external actions to build tension." 
+        text: response.answer 
       };
-      setChatMessages(prev => [...prev, response]);
+      setChatMessages(prev => [...prev, aiResponse]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      const errorResponse: ChatMessage = { 
+        id: (Date.now() + 1).toString(), 
+        role: 'ai', 
+        text: "I'm sorry, I encountered an error while processing your request." 
+      };
+      setChatMessages(prev => [...prev, errorResponse]);
+    } finally {
       setIsAiThinking(false);
-    }, 1500);
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (isSummarizing) return;
+    setIsSummarizing(true);
+    
+    // Open chat if closed to show summary
+    if (!isAiAssistOpen) setIsAiAssistOpen(true);
+
+    // Add a temporary "thinking" message or just rely on isSummarizing state in UI if needed
+    // For now, let's just show the spinner in the button or similar.
+    // Actually, let's add a system message saying we are summarizing.
+    setChatMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      role: 'ai',
+      text: "Generating chapter summary..."
+    }]);
+
+    try {
+      const bookId = (book as any).id || "test-book-1";
+      const userId = "test-user-1";
+      const response = await summarizeChapter(userId, bookId, (currentChapterIndex + 1).toString());
+      
+      setChatMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'ai',
+        text: `**Chapter Summary:**\n\n${response.summary}`
+      }]);
+    } catch (error) {
+      console.error("Summarize error:", error);
+      setChatMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'ai',
+        text: "Failed to generate summary."
+      }]);
+    } finally {
+      setIsSummarizing(false);
+    }
   };
 
   return (
@@ -150,6 +221,20 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
 
           <div className="w-px h-4 bg-white/10"></div>
 
+          {/* Summarize Button */}
+          <button 
+            onClick={handleSummarize}
+            disabled={isSummarizing}
+            className={`p-1.5 rounded-full transition-all duration-300 ${
+              isSummarizing 
+              ? 'text-brand-orange bg-white/10 animate-pulse' 
+              : 'text-brand-cream/60 hover:text-brand-orange'
+            }`}
+            title="Summarize Chapter"
+          >
+            <FileText className="w-5 h-5" />
+          </button>
+
           {/* AI Assist Toggle */}
           <button 
             onClick={() => setIsAiAssistOpen(!isAiAssistOpen)}
@@ -208,13 +293,35 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
               <Loader2 className="w-10 h-10 text-brand-brown animate-spin" />
               <p className="text-brand-brown/70 font-serif italic">Writing content...</p>
             </div>
+          ) : content === "__CONTENT_UNAVAILABLE__" || content === "__CONTENT_ERROR__" ? (
+            <div className="animate-fade-in font-serif prose max-w-none flex-1">
+              <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center animate-fade-in">
+                <div className={`p-4 rounded-full mb-4 ${isNightMode ? 'bg-red-500/10' : 'bg-red-100'}`}>
+                  <AlertTriangle className={`w-8 h-8 ${isNightMode ? 'text-red-400' : 'text-red-600'}`} />
+                </div>
+                <h3 className="text-xl font-bold mb-2 opacity-90">
+                  {content === "__CONTENT_UNAVAILABLE__" ? "Content Unavailable" : "Failed to Load Content"}
+                </h3>
+                <p className="max-w-md mx-auto leading-relaxed opacity-70 mb-6">
+                  {content === "__CONTENT_UNAVAILABLE__" 
+                    ? `We couldn't load the text for this chapter. This is a placeholder error message for demonstration purposes (triggered for "${book.title}").`
+                    : "There was an error loading the content. Please check your connection and try again."
+                  }
+                </p>
+                <button 
+                  className="px-6 py-2 rounded-full font-bold text-sm transition-colors bg-black/5 hover:bg-black/10 text-black"
+                  onClick={() => window.location.reload()}
+                >
+                  Reload Page
+                </button>
+              </div>
+            </div>
           ) : (
-            <div className="prose prose-lg prose-brown max-w-none font-serif leading-loose">
+            <div className="animate-fade-in font-serif prose max-w-none flex-1">
               <h2 className="text-3xl font-bold text-brand-darkBrown mb-8 text-center border-b-2 border-brand-brown/20 pb-6">
                 {book.chapters[currentChapterIndex]}
               </h2>
               <ReactMarkdown>{content}</ReactMarkdown>
-              
               <div className="flex justify-center mt-12 text-brand-brown/40">
                 <BookOpen className="w-6 h-6" />
               </div>

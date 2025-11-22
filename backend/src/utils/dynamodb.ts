@@ -22,3 +22,17 @@ export const queryItems = async (tableName: string, pk: string, skPrefix?: strin
   const result = await docClient.send(new QueryCommand(params));
   return result.Items || [];
 };
+
+import { ScanCommand } from '@aws-sdk/lib-dynamodb';
+
+export const queryByType = async (tableName: string, type: string) => {
+  const params = {
+    TableName: tableName,
+    IndexName: 'TypeIndex',
+    KeyConditionExpression: '#type = :type',
+    ExpressionAttributeNames: { '#type': 'type' },
+    ExpressionAttributeValues: { ':type': type }
+  };
+  const result = await docClient.send(new QueryCommand(params));
+  return result.Items || [];
+};

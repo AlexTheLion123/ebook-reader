@@ -27,6 +27,17 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - PUT
+              - GET
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            MaxAge: 3000
 
   # DynamoDB Tables
   TextbookContentTable:
@@ -38,11 +49,22 @@ Resources:
           AttributeType: S
         - AttributeName: SK
           AttributeType: S
+        - AttributeName: type
+          AttributeType: S
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
         - AttributeName: SK
           KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: TypeIndex
+          KeySchema:
+            - AttributeName: type
+              KeyType: HASH
+            - AttributeName: PK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
   UserProgressTable:
     Type: AWS::DynamoDB::Table
@@ -170,6 +192,88 @@ Resources:
           Properties:
             RestApiId: !Ref TextbookApi
             Path: /summarize
+            Method: post
+
+  ListBooksFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/listBooks.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TextbookContentTable
+      Events:
+        ListBooks:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /books
+            Method: get
+
+  ProcessPdfFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        External:
+          - "canvas"
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/processPdf.handler
+      Timeout: 300
+      MemorySize: 1024
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref TextbookPDFBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+      Events:
+        S3Upload:
+          Type: S3
+          Properties:
+            Bucket: !Ref TextbookPDFBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .pdf
+
+  ReprocessPdfFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        External:
+          - "canvas"
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/reprocessPdf.handler
+      Timeout: 300
+      MemorySize: 1024
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref TextbookPDFBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+      Events:
+        Reprocess:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /reprocess
             Method: post
 
 Outputs:

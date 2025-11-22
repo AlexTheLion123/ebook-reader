@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { HeroSection } from './components/HeroSection';
 import { MainApp } from './components/MainApp';
 
@@ -9,67 +10,56 @@ const LANDING_BG_URL = "https://images.unsplash.com/photo-1481627834876-b7833e8f
 // We will tint this heavily with CSS to match the "Orange Vector" aesthetic provided
 const APP_BG_URL = "https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=2690&auto=format&fit=crop";
 
-type ViewState = 'LANDING' | 'APP';
-
-function App() {
-  const [view, setView] = useState<ViewState>('LANDING');
-  const [initialQuery, setInitialQuery] = useState('');
+function LandingPage() {
+  const navigate = useNavigate();
 
   const handleEnterApp = (query: string) => {
-    setInitialQuery(query);
-    setView('APP');
+    navigate('/books');
   };
 
   return (
-    <div className="relative w-full min-h-screen overflow-hidden bg-[#3E2723]">
-      {/* 
-        Background Rendering Logic:
-        - Landing: Cozy dark image with curved overlay
-        - App: Bookshelf image with heavy brown tint to mimic vector art
-      */}
-      
-      {/* Background Layer */}
-      <div className="absolute inset-0 z-0 transition-opacity duration-700 ease-in-out">
-        {view === 'LANDING' ? (
-          <>
-            {/* Landing Background Image */}
-            <div 
-              className="absolute inset-0 bg-cover bg-center transition-transform duration-[3s] scale-105"
-              style={{ backgroundImage: `url(${LANDING_BG_URL})` }}
-            />
-            {/* Landing Overlay (Curved Dark) */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#1a110e] via-[#2a1d18]/95 to-transparent w-full md:w-[70%] skew-x-12 -translate-x-24 mix-blend-multiply" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#1a110e] via-transparent to-black/20" />
-          </>
-        ) : (
-          <>
-            {/* App Background Image */}
-            <div 
-              className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${APP_BG_URL})` }}
-            />
-            {/* 
-              App Overlay - Earthy Brown Tint 
-              Changed from Orange/Red to Brown shades as requested.
-              Gradient goes from Light Brown -> Medium Brown -> Dark Brown
-            */}
-            <div className="absolute inset-0 bg-gradient-to-br from-[#8D6E63]/90 via-[#5D4037]/90 to-[#3E2723]/95 mix-blend-multiply" />
-            <div className="absolute inset-0 bg-[#3E2723]/30 backdrop-blur-[1px]" />
-          </>
-        )}
+    <>
+      <div className="absolute inset-0 bg-cover bg-center transition-transform duration-[3s] scale-105"
+        style={{ backgroundImage: `url(${LANDING_BG_URL})` }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-[#1a110e] via-[#2a1d18]/95 to-transparent w-full md:w-[70%] skew-x-12 -translate-x-24 mix-blend-multiply" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#1a110e] via-transparent to-black/20" />
+      <div className="relative z-10 flex items-center min-h-screen">
+        <HeroSection onEnterApp={handleEnterApp} />
       </div>
+    </>
+  );
+}
 
-      {/* Content Render */}
+function BooksPage() {
+  return (
+    <>
+      <div className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${APP_BG_URL})` }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#8D6E63]/90 via-[#5D4037]/90 to-[#3E2723]/95 mix-blend-multiply" />
+      <div className="absolute inset-0 bg-[#3E2723]/30 backdrop-blur-[1px]" />
       <div className="relative z-10 w-full min-h-screen">
-        {view === 'LANDING' ? (
-          <div className="flex items-center min-h-screen">
-             <HeroSection onEnterApp={handleEnterApp} />
-          </div>
-        ) : (
-          <MainApp initialQuery={initialQuery} />
-        )}
+        <MainApp initialQuery="" />
       </div>
-    </div>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <div className="relative w-full min-h-screen overflow-hidden bg-[#3E2723]">
+        <div className="absolute inset-0 z-0 transition-opacity duration-700 ease-in-out">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/books" element={<BooksPage />} />
+            <Route path="/books/:bookId" element={<BooksPage />} />
+            <Route path="/books/:bookId/read/:chapter" element={<BooksPage />} />
+          </Routes>
+        </div>
+      </div>
+    </BrowserRouter>
   );
 }
 
