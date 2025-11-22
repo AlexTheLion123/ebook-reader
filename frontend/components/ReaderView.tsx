@@ -1,0 +1,326 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, BookOpen, Type, Minus, Plus, Lightbulb, Sparkles, SkipBack, SkipForward, Bot, X } from 'lucide-react';
+import { BookDetails } from '../types';
+import { getChapterContent } from '../services/geminiService';
+import ReactMarkdown from 'react-markdown';
+
+interface ReaderViewProps {
+  book: BookDetails;
+  initialChapterIndex: number;
+  onClose: () => void;
+}
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'ai';
+  text: string;
+}
+
+export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterIndex, onClose }) => {
+  const [currentChapterIndex, setCurrentChapterIndex] = useState(initialChapterIndex);
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(true);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Appearance State
+  const [isNightMode, setIsNightMode] = useState(false);
+  const [fontSize, setFontSize] = useState(18);
+
+  // AI Chat State
+  const [isAiAssistOpen, setIsAiAssistOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { id: 'init', role: 'ai', text: "Hello! I'm your literary companion. Feel free to ask me about the characters, themes, or plot of this book." }
+  ]);
+  const [isAiThinking, setIsAiThinking] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchContent = async () => {
+      setLoading(true);
+      // Scroll to top when changing chapters
+      if (contentRef.current) {
+        contentRef.current.scrollTop = 0;
+      }
+      
+      const chapterTitle = book.chapters[currentChapterIndex];
+      const text = await getChapterContent(book.title, book.author, chapterTitle);
+      setContent(text);
+      setLoading(false);
+    };
+
+    fetchContent();
+  }, [book, currentChapterIndex]);
+
+  // Scroll chat to bottom
+  useEffect(() => {
+    if(isAiAssistOpen) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, isAiAssistOpen, isAiThinking]);
+
+  const handleNext = () => {
+    if (currentChapterIndex < book.chapters.length - 1) {
+      setCurrentChapterIndex(prev => prev + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentChapterIndex > 0) {
+      setCurrentChapterIndex(prev => prev - 1);
+    }
+  };
+
+  const handleSendChat = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const newMessage: ChatMessage = { id: Date.now().toString(), role: 'user', text: chatInput };
+    setChatMessages(prev => [...prev, newMessage]);
+    setChatInput('');
+    setIsAiThinking(true);
+
+    // Mock AI Response
+    setTimeout(() => {
+      const response: ChatMessage = { 
+        id: (Date.now() + 1).toString(), 
+        role: 'ai', 
+        text: "That's a fascinating question! Based on the text, the author seems to be exploring the duality of human nature here, contrasting the protagonist's internal monologue with their external actions to build tension." 
+      };
+      setChatMessages(prev => [...prev, response]);
+      setIsAiThinking(false);
+    }, 1500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-[#2a1d18] flex flex-col animate-fade-in">
+      {/* Reader Header */}
+      <div className="bg-[#3E2723] shadow-xl px-6 py-3 flex items-center justify-between border-b border-[#A1887F]/20 z-20 relative">
+        {/* Left: Back & Title */}
+        <div className="flex items-center gap-4 flex-1 overflow-hidden">
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors text-brand-cream/80 hover:text-brand-orange shrink-0"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <div className="flex flex-col truncate">
+            <h2 className="text-white font-bold text-lg leading-none tracking-tight truncate">
+              {book.title}
+            </h2>
+            <p className="text-xs text-brand-lightBrown mt-1 font-medium truncate">
+              Chapter {currentChapterIndex + 1}: {book.chapters[currentChapterIndex]}
+            </p>
+          </div>
+        </div>
+
+        {/* Right: Toolbar */}
+        <div className="flex items-center bg-black/20 rounded-full px-3 py-1.5 gap-3 border border-white/5 backdrop-blur-sm ml-4 shrink-0">
+           {/* Font Controls */}
+           <div className="flex items-center gap-2 text-brand-cream/80">
+              <button 
+                onClick={() => setFontSize(Math.max(14, fontSize - 2))}
+                className="hover:text-white hover:bg-white/10 p-1 rounded transition-colors"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <Type className="w-4 h-4" />
+              <button 
+                onClick={() => setFontSize(Math.min(32, fontSize + 2))}
+                className="hover:text-white hover:bg-white/10 p-1 rounded transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+           </div>
+
+           <div className="w-px h-4 bg-white/10"></div>
+
+           {/* Theme Toggle */}
+           <button 
+            onClick={() => setIsNightMode(!isNightMode)}
+            className={`p-1.5 rounded-full transition-all duration-300 ${
+              isNightMode 
+                ? 'text-yellow-400 bg-white/10' 
+                : 'text-brand-cream/60 hover:text-brand-orange'
+            }`}
+            title="Toggle Night Light"
+          >
+            <Lightbulb className={`w-5 h-5 ${isNightMode ? 'fill-current' : ''}`} />
+          </button>
+
+          <div className="w-px h-4 bg-white/10"></div>
+
+          {/* AI Assist Toggle */}
+          <button 
+            onClick={() => setIsAiAssistOpen(!isAiAssistOpen)}
+            className={`p-1.5 rounded-full transition-all duration-300 ${
+              isAiAssistOpen 
+              ? 'text-brand-orange bg-white/10 shadow-[0_0_15px_rgba(243,120,53,0.3)]' 
+              : 'text-brand-cream/60 hover:text-brand-orange'
+            }`}
+            title="AI Assistant"
+          >
+            <Sparkles className="w-5 h-5" />
+          </button>
+
+          <div className="w-px h-4 bg-white/10"></div>
+
+          {/* Chapter Navigation (Top Toolbar) */}
+          <div className="flex items-center gap-1">
+             <button 
+                onClick={handlePrev}
+                disabled={loading || currentChapterIndex === 0}
+                className="p-1.5 text-brand-cream/60 hover:text-white hover:bg-white/10 rounded-full transition-colors disabled:opacity-30"
+                title="Previous Chapter"
+             >
+                <SkipBack className="w-4 h-4" />
+             </button>
+             <span className="text-xs font-mono text-brand-cream/40 min-w-[4ch] text-center">
+                CH {currentChapterIndex + 1}
+             </span>
+             <button 
+                onClick={handleNext}
+                disabled={loading || currentChapterIndex === book.chapters.length - 1}
+                className="p-1.5 text-brand-cream/60 hover:text-white hover:bg-white/10 rounded-full transition-colors disabled:opacity-30"
+                title="Next Chapter"
+             >
+                <SkipForward className="w-4 h-4" />
+             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div 
+        ref={contentRef}
+        className="flex-1 overflow-y-auto scroll-smooth p-6 md:p-12 relative"
+      >
+        <div 
+          className={`max-w-3xl mx-auto p-8 md:p-16 rounded-sm shadow-2xl min-h-[80vh] transition-colors duration-500 ${
+            isNightMode 
+              ? 'bg-[#F5E6D3] text-[#4E342E]' // Night Mode ON (Cozy Library Day Mode)
+              : 'bg-[#EFEBE9] text-[#3E2723]' // Night Mode OFF (Current Quickbook)
+          }`}
+          style={{ fontSize: `${fontSize}px` }}
+        >
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <Loader2 className="w-10 h-10 text-brand-brown animate-spin" />
+              <p className="text-brand-brown/70 font-serif italic">Writing content...</p>
+            </div>
+          ) : (
+            <div className="prose prose-lg prose-brown max-w-none font-serif leading-loose">
+              <h2 className="text-3xl font-bold text-brand-darkBrown mb-8 text-center border-b-2 border-brand-brown/20 pb-6">
+                {book.chapters[currentChapterIndex]}
+              </h2>
+              <ReactMarkdown>{content}</ReactMarkdown>
+              
+              <div className="flex justify-center mt-12 text-brand-brown/40">
+                <BookOpen className="w-6 h-6" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* AI Assist Sidebar */}
+      <div className={`absolute top-0 right-0 h-full w-full md:w-96 bg-[#1a110e]/95 backdrop-blur-xl border-l border-[#A1887F]/20 shadow-2xl transform transition-transform duration-300 ease-in-out z-40 flex flex-col ${isAiAssistOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          {/* Sidebar Header */}
+          <div className="p-5 border-b border-[#A1887F]/20 flex items-center justify-between bg-[#2a1d18]/50">
+              <div className="flex items-center gap-2">
+                  <div className="bg-brand-orange/20 p-2 rounded-lg">
+                      <Bot className="w-5 h-5 text-brand-orange" />
+                  </div>
+                  <div>
+                      <h3 className="text-white font-bold text-lg">AI Companion</h3>
+                      <p className="text-xs text-brand-cream/50">Always here to help</p>
+                  </div>
+              </div>
+              <button onClick={() => setIsAiAssistOpen(false)} className="text-brand-cream/40 hover:text-white transition-colors">
+                  <X className="w-6 h-6" />
+              </button>
+          </div>
+
+          {/* Chat Area */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {chatMessages.map((msg) => (
+                  <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed animate-fade-in ${
+                          msg.role === 'user' 
+                          ? 'bg-brand-orange text-white rounded-tr-none shadow-lg' 
+                          : 'bg-[#3E2723] text-brand-cream border border-[#A1887F]/20 rounded-tl-none'
+                      }`}>
+                          {msg.text}
+                      </div>
+                  </div>
+              ))}
+              {isAiThinking && (
+                  <div className="flex justify-start animate-fade-in">
+                      <div className="bg-[#3E2723] text-brand-cream border border-[#A1887F]/20 rounded-2xl rounded-tl-none p-4 flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-brand-orange/50 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                          <div className="w-1.5 h-1.5 bg-brand-orange/50 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                          <div className="w-1.5 h-1.5 bg-brand-orange/50 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                      </div>
+                  </div>
+              )}
+              <div ref={chatEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 border-t border-[#A1887F]/20 bg-[#2a1d18]/50">
+              <form onSubmit={handleSendChat} className="relative">
+                  <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Ask about the book..."
+                      className="w-full bg-black/20 border border-[#A1887F]/30 rounded-xl py-3 pl-4 pr-12 text-brand-cream placeholder-brand-cream/30 focus:outline-none focus:border-brand-orange/50 focus:ring-1 focus:ring-brand-orange/50 transition-all"
+                  />
+                  <button 
+                      type="submit"
+                      disabled={!chatInput.trim()}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-brand-orange text-white rounded-lg hover:bg-brand-darkOrange transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                      <ArrowLeft className="w-4 h-4 rotate-180" />
+                  </button>
+              </form>
+          </div>
+      </div>
+
+      {/* Footer Navigation */}
+      <div className="bg-[#3E2723] p-4 border-t border-[#A1887F]/20">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
+          <button 
+            onClick={handlePrev}
+            disabled={currentChapterIndex === 0 || loading}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              currentChapterIndex === 0 || loading
+                ? 'text-white/20 cursor-not-allowed' 
+                : 'text-brand-cream hover:bg-white/10 hover:text-brand-orange'
+            }`}
+          >
+            <ChevronLeft className="w-5 h-5" />
+            Previous
+          </button>
+
+          <span className="text-sm text-brand-lightBrown font-medium">
+            {currentChapterIndex + 1} / {book.chapters.length}
+          </span>
+
+          <button 
+            onClick={handleNext}
+            disabled={currentChapterIndex === book.chapters.length - 1 || loading}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              currentChapterIndex === book.chapters.length - 1 || loading
+                ? 'text-white/20 cursor-not-allowed' 
+                : 'text-brand-cream hover:bg-white/10 hover:text-brand-orange'
+            }`}
+          >
+            Next
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

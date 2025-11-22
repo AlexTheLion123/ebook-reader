@@ -1,0 +1,8 @@
+node_modules/
+.aws-sam/
+*.js
+*.js.map
+*.d.ts
+!jest.config.js
+.env
+samconfig.toml
