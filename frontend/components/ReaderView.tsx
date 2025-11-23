@@ -169,6 +169,33 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
 
   return (
     <div className="fixed inset-0 z-50 bg-[#2a1d18] flex flex-col animate-fade-in">
+      <style>{`
+        .chapter-content {
+          font-style: normal;
+        }
+        .chapter-content h1:first-child,
+        .chapter-content h2:first-child,
+        .chapter-content h3:first-child,
+        .chapter-content h4:first-child {
+          display: none;
+        }
+        .chapter-content p {
+          text-indent: 1em;
+        }
+        .chapter-content > p:first-of-type {
+          text-indent: 0;
+        }
+        .chapter-content h1 + p,
+        .chapter-content h2 + p,
+        .chapter-content h3 + p,
+        .chapter-content h4 + p,
+        .chapter-content h5 + p,
+        .chapter-content h6 + p,
+        .chapter-content hr + p,
+        .chapter-content br + p {
+          text-indent: 0;
+        }
+      `}</style>
       {/* Reader Header */}
       <div className="bg-[#3E2723] shadow-xl px-6 py-3 flex items-center justify-between border-b border-[#A1887F]/20 z-20 relative">
         {/* Left: Back & Title */}
@@ -193,8 +220,8 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
             <h2 className="text-white font-bold text-lg leading-none tracking-tight truncate">
               {book.title}
             </h2>
-            <p className="text-xs text-brand-lightBrown mt-1 font-medium truncate">
-              Chapter {currentChapterIndex + 1}: {book.chapters[currentChapterIndex]}
+            <p className="text-xs text-brand-orange mt-1 font-medium truncate">
+              {book.chapters[currentChapterIndex]}
             </p>
           </div>
         </div>
@@ -335,7 +362,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
               <h2 className="text-3xl font-bold text-brand-darkBrown mb-8 text-center border-b-2 border-brand-brown/20 pb-6">
                 {book.chapters[currentChapterIndex]}
               </h2>
-              <div dangerouslySetInnerHTML={{ __html: content }} />
+              <div className="chapter-content" dangerouslySetInnerHTML={{ __html: content }} />
               <div className="flex justify-center mt-12 text-brand-brown/40">
                 <BookOpen className="w-6 h-6" />
               </div>

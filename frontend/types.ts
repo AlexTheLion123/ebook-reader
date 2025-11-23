@@ -24,6 +24,8 @@ export interface Paragraph {
   section: string;
   paragraphText: string;
   metadata: any;
+  content?: string; // HTML content from S3 for EPUB chapters
+  s3Key?: string;
 }
 
 export interface BookContentResponse {
