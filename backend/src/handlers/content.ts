@@ -1,5 +1,6 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
-import { queryItems } from '../utils/dynamodb';
+import { queryItems, getItem } from '../utils/dynamodb';
+import { getObject } from '../utils/s3';
 
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
@@ -11,9 +12,29 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     }
 
     const pk = `book#${bookId}`;
-    const skPrefix = chapter ? `chapter#${chapter}#` : 'chapter#';
-    
-    const items = await queryItems(process.env.CONTENT_TABLE!, pk, skPrefix);
+    let items = [];
+
+    if (chapter) {
+      // Fetch specific chapter
+      const item = await getItem(process.env.CONTENT_TABLE!, { PK: pk, SK: `chapter#${chapter}` });
+      if (item) {
+        if (item.s3Key) {
+          try {
+            const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, item.s3Key);
+            item.content = contentBuffer.toString('utf-8');
+          } catch (e) {
+            console.error(`Failed to fetch content from S3 for ${item.s3Key}`, e);
+            item.content = 'Error loading content';
+          }
+        }
+        items.push(item);
+      }
+    } else {
+      // Fetch all chapters (metadata only ideally, but here we get everything)
+      // Note: This might be heavy if content is included. 
+      // For listing chapters, we might want a different query or GSI, but for now:
+      items = await queryItems(process.env.CONTENT_TABLE!, pk, 'chapter#');
+    }
 
     return {
       statusCode: 200,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Loader2, Bell, BookOpen } from 'lucide-react';
+import { Search, Loader2, Bell, BookOpen, LayoutGrid, List } from 'lucide-react';
 import { listBooks } from '../services/backendService';
 import { BookRecommendation, BookDetails } from '../types';
 import { BookCard } from './BookCard';
@@ -15,6 +15,7 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
   const [books, setBooks] = useState<BookRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
   // Detail View State
   const [selectedBook, setSelectedBook] = useState<BookDetails | null>(null);
@@ -34,16 +35,17 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
         // Extract ID from PK if bookId is missing (PK format: "book#UUID")
         const id = b.bookId || (b.PK ? b.PK.replace('book#', '') : 'unknown');
         
-        // Use filename as title if title is missing, removing the .pdf extension
-        const displayTitle = b.title || (b.fileName ? b.fileName.replace(/\.pdf$/i, '') : 'Untitled Book');
+        // Use filename as title if title is missing, removing the .epub extension
+        const displayTitle = b.title || (b.fileName ? b.fileName.replace(/\.epub$/i, '') : 'Untitled Book');
 
         return {
           title: displayTitle,
           author: b.author || 'Unknown Author',
-          description: b.description || 'Uploaded PDF Textbook',
+          description: b.description || 'Uploaded EPUB Textbook',
           rating: 5.0,
-          id: id
-        };
+          id: id,
+          chapters: b.chapters || []
+        } as any;
       });
 
       setBooks(mappedBooks as any);
@@ -59,11 +61,12 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     // For uploaded books, we don't need to fetch details from Gemini.
     // We just construct a BookDetails object directly.
     const bookId = (book as any).id;
+    const chapters = (book as any).chapters || [];
     
     const details: BookDetails = {
       ...book,
       longDescription: "This is an uploaded textbook.",
-      chapters: ["Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5"], // Mock chapters for now as we don't have chapter metadata yet
+      chapters: chapters,
       id: bookId // Pass the bookId through to BookDetails
     };
     
@@ -184,37 +187,74 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
         </div>
 
         {/* Categories / Filters Chips */}
-        <div className="flex gap-3 overflow-x-auto pb-6 mb-6 scrollbar-hide">
-          {['All Genres', 'Fiction', 'Non-Fiction', 'Sci-Fi', 'Mystery', 'Biography', 'History', 'Self-Help'].map((genre, i) => (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div className="flex gap-3 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto scrollbar-hide">
+            {['All Genres', 'Fiction', 'Non-Fiction', 'Sci-Fi', 'Mystery', 'Biography', 'History', 'Self-Help'].map((genre, i) => (
+              <button 
+                key={genre}
+                onClick={() => {
+                  setQuery(genre === 'All Genres' ? '' : genre);
+                  fetchBooks();
+                }}
+                className={`whitespace-nowrap px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 border backdrop-blur-sm ${
+                  i === 0 
+                  ? 'bg-brand-orange border-brand-orange text-white shadow-lg shadow-brand-orange/20' 
+                  : 'bg-black/20 border-white/5 hover:bg-black/30 hover:border-white/20 text-white'
+                }`}
+              >
+                {genre}
+              </button>
+            ))}
+          </div>
+
+          {/* View Toggle */}
+          <div className="flex items-center gap-1 bg-black/20 p-1 rounded-lg border border-white/5 self-end sm:self-auto shrink-0">
             <button 
-              key={genre}
-              onClick={() => {
-                setQuery(genre === 'All Genres' ? '' : genre);
-                fetchBooks();
-              }}
-              className={`whitespace-nowrap px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 border backdrop-blur-sm ${
-                i === 0 
-                ? 'bg-brand-orange border-brand-orange text-white shadow-lg shadow-brand-orange/20' 
-                : 'bg-black/20 border-white/5 hover:bg-black/30 hover:border-white/20 text-white'
+              onClick={() => setViewMode('grid')} 
+              className={`p-2 rounded-md transition-all duration-300 ${
+                viewMode === 'grid' 
+                ? 'bg-brand-orange text-white shadow-sm' 
+                : 'text-brand-cream/60 hover:text-white hover:bg-white/5'
               }`}
+              title="Grid View"
             >
-              {genre}
+              <LayoutGrid size={18} />
             </button>
-          ))}
+            <button 
+              onClick={() => setViewMode('list')} 
+              className={`p-2 rounded-md transition-all duration-300 ${
+                viewMode === 'list' 
+                ? 'bg-brand-orange text-white shadow-sm' 
+                : 'text-brand-cream/60 hover:text-white hover:bg-white/5'
+              }`}
+              title="List View"
+            >
+              <List size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Results Grid */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Loader2 className="w-12 h-12 text-brand-orange animate-spin mb-4" />
-            <p className="text-brand-cream/70 text-lg animate-pulse">Curating the best books for you...</p>
+            <p className="text-white/80 animate-pulse">Finding the perfect books for you...</p>
           </div>
         ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {books.map((book, index) => (
-                  <BookCard key={index} book={book} onClick={handleBookClick} />
-                ))}
-              </div>
+          <div className={`grid gap-6 animate-slide-up ${
+            viewMode === 'grid' 
+              ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' 
+              : 'grid-cols-1'
+          }`}>
+            {books.map((book, idx) => (
+              <BookCard key={idx} book={book} onClick={handleBookClick} viewMode={viewMode} />
+            ))}
+            {books.length === 0 && hasSearched && (
+               <div className="col-span-full text-center py-20 text-white/60">
+                  No books found. Try a different search term.
+               </div>
+            )}
+          </div>
         )}
           </>
         )}

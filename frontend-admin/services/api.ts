@@ -1,7 +1,7 @@
 import { API_ENDPOINTS } from '../constants';
 import { FrontendBook } from '../types';
 
-const FRONTEND_API_BASE = 'https://uh999me2ye.execute-api.eu-west-1.amazonaws.com/prod';
+const FRONTEND_API_BASE = 'https://6ga7cukouj.execute-api.eu-west-1.amazonaws.com/prod';
 
 export const getPresignedUrl = async (bookId: string, fileName: string, metadata: { title: string, author: string, description: string, subject?: string }): Promise<string> => {
   console.log(`[getPresignedUrl] Requesting URL for bookId: ${bookId}, fileName: ${fileName}`);

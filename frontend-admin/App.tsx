@@ -55,6 +55,22 @@ const App: React.FC = () => {
     localStorage.setItem('uploadedBooks', JSON.stringify(uploadedBooks));
   }, [uploadedBooks]);
 
+  // Resume polling for processing books on mount
+  useEffect(() => {
+    const processingBooks = uploadedBooks.filter(b => b.status === 'processing');
+    if (processingBooks.length > 0) {
+      console.log(`Resuming polling for ${processingBooks.length} books...`);
+      processingBooks.forEach(book => pollBookStatus(book.bookId));
+    }
+    // Mark interrupted uploads as failed
+    const interruptedUploads = uploadedBooks.filter(b => b.status === 'uploading');
+    if (interruptedUploads.length > 0) {
+      setUploadedBooks(prev => prev.map(b => 
+        b.status === 'uploading' ? { ...b, status: 'error' } : b
+      ));
+    }
+  }, []); // Run once on mount
+
   // --- Handlers ---
   const addToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     const id = crypto.randomUUID();
@@ -107,6 +123,8 @@ const App: React.FC = () => {
           setUploadedBooks(prev => prev.map(b => 
             b.bookId === bookId ? { ...b, status: 'success' } : b
           ));
+          // Refresh the library list to show the new book
+          fetchFrontendBooks(false);
         } else if (status === 'failed') {
           clearInterval(interval);
           addToast('error', `Processing failed: ${error || 'Unknown error'}`);
@@ -381,7 +399,7 @@ const App: React.FC = () => {
 
                 {/* Upload Zone */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">PDF File <span className="text-red-500">*</span></label>
+                  <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">EPUB File <span className="text-red-500">*</span></label>
                   <UploadZone 
                     onFileSelect={setSelectedFile} 
                     selectedFile={selectedFile} 

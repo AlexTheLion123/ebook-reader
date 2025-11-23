@@ -2,6 +2,15 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Textbook Study Buddy MVP Backend
 
+Parameters:
+  NotificationEmail:
+    Type: String
+    Description: Email address for EPUB processing failure notifications
+    Default: ""
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, ""]]
+
 Globals:
   Function:
     Timeout: 30
@@ -9,13 +18,13 @@ Globals:
     MemorySize: 512
     Environment:
       Variables:
-        BOOKS_BUCKET: !Ref TextbookPDFBucket
+        BOOKS_BUCKET: !Ref TextbookBucket
         CONTENT_TABLE: !Ref TextbookContentTable
         PROGRESS_TABLE: !Ref UserProgressTable
 
 Resources:
-  # S3 Bucket for PDFs
-  TextbookPDFBucket:
+  # S3 Bucket for EPUB files
+  TextbookBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketEncryption:
@@ -105,7 +114,7 @@ Resources:
       Handler: src/handlers/upload.handler
       Policies:
         - S3CrudPolicy:
-            BucketName: !Ref TextbookPDFBucket
+            BucketName: !Ref TextbookBucket
         - DynamoDBCrudPolicy:
             TableName: !Ref TextbookContentTable
       Events:
@@ -130,6 +139,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref TextbookContentTable
+        - S3ReadPolicy:
+            BucketName: !Ref TextbookBucket
       Events:
         GetContent:
           Type: Api
@@ -238,6 +249,28 @@ Resources:
             Path: /books/{bookId}/status
             Method: get
 
+  InspectContentFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/inspectContent.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TextbookContentTable
+      Events:
+        InspectContent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /inspect/{bookId}
+            Method: get
+
   ReprocessFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -252,10 +285,10 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref TextbookContentTable
-          BUCKET_NAME: !Ref TextbookPDFBucket
+          BUCKET_NAME: !Ref TextbookBucket
       Policies:
         - S3CrudPolicy:
-            BucketName: !Ref TextbookPDFBucket
+            BucketName: !Ref TextbookBucket
         - DynamoDBCrudPolicy:
             TableName: !Ref TextbookContentTable
       Events:
@@ -266,7 +299,21 @@ Resources:
             Path: /books/{bookId}/reprocess
             Method: post
 
-  ProcessPdfFunction:
+  # SNS Topic for EPUB Processing Notifications
+  EpubProcessingTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: EPUB Processing Notifications
+
+  EpubProcessingEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Protocol: email
+      TopicArn: !Ref EpubProcessingTopic
+      Endpoint: !Ref NotificationEmail
+
+  ProcessEpubFunction:
     Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: esbuild
@@ -276,35 +323,123 @@ Resources:
         Sourcemap: true
     Properties:
       CodeUri: ./
-      Handler: src/handlers/processPdf.handler
-      Timeout: 900
+      Handler: src/handlers/processEpub.handler
+      Timeout: 300
       MemorySize: 1024
       Policies:
-        - S3ReadPolicy:
-            BucketName: !Ref TextbookPDFBucket
+        - S3CrudPolicy:
+            BucketName: !Ref TextbookBucket
         - DynamoDBCrudPolicy:
             TableName: !Ref TextbookContentTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt EpubProcessingTopic.TopicName
+
+  ProcessEpubFunctionEventInvokeConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    DependsOn:
+      - ProcessEpubFunction
+      - EpubProcessingTopic
+    Properties:
+      FunctionName: !Ref ProcessEpubFunction
+      Qualifier: $LATEST
+      DestinationConfig:
+        OnFailure:
+          Destination: !Ref EpubProcessingTopic
+
+  ProcessEpubFunctionS3Permission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProcessEpubFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub 'arn:aws:s3:::${TextbookBucket}'
+
+  # Custom resource to configure S3 notifications
+  S3NotificationCustomResource:
+    Type: Custom::S3BucketNotification
+    DependsOn: ProcessEpubFunctionS3Permission
+    Properties:
+      ServiceToken: !GetAtt S3NotificationFunction.Arn
+      BucketName: !Ref TextbookBucket
+      LambdaArn: !GetAtt ProcessEpubFunction.Arn
+
+  S3NotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.9
+      Handler: index.handler
+      InlineCode: |
+        import json
+        import boto3
+        import urllib3
+
+        s3 = boto3.client('s3')
+        http = urllib3.PoolManager()
+
+        def send_response(event, context, status, data={}):
+            body = json.dumps({
+                'Status': status,
+                'Reason': f'See CloudWatch Log Stream: {context.log_stream_name}',
+                'PhysicalResourceId': context.log_stream_name,
+                'StackId': event['StackId'],
+                'RequestId': event['RequestId'],
+                'LogicalResourceId': event['LogicalResourceId'],
+                'Data': data
+            })
+            http.request('PUT', event['ResponseURL'], body=body)
+
+        def handler(event, context):
+            try:
+                bucket = event['ResourceProperties']['BucketName']
+                lambda_arn = event['ResourceProperties']['LambdaArn']
+                
+                if event['RequestType'] == 'Delete':
+                    s3.put_bucket_notification_configuration(
+                        Bucket=bucket,
+                        NotificationConfiguration={}
+                    )
+                else:
+                    s3.put_bucket_notification_configuration(
+                        Bucket=bucket,
+                        NotificationConfiguration={
+                            'LambdaFunctionConfigurations': [{
+                                'LambdaFunctionArn': lambda_arn,
+                                'Events': ['s3:ObjectCreated:*'],
+                                'Filter': {
+                                    'Key': {
+                                        'FilterRules': [{'Name': 'suffix', 'Value': '.epub'}]
+                                    }
+                                }
+                            }]
+                        }
+                    )
+                send_response(event, context, 'SUCCESS')
+            except Exception as e:
+                print(f'Error: {e}')
+                send_response(event, context, 'FAILED')
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref TextbookBucket
         - Statement:
             - Effect: Allow
               Action:
-                - textract:StartDocumentAnalysis
-                - textract:GetDocumentAnalysis
-              Resource: '*'
-
-  ProcessPdfFunctionS3Permission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref ProcessPdfFunction
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceArn: !GetAtt TextbookPDFBucket.Arn
-
-
+                - s3:PutBucketNotification
+                - s3:GetBucketNotification
+              Resource: !Sub 'arn:aws:s3:::${TextbookBucket}'
 
 Outputs:
   ApiEndpoint:
     Description: API Gateway endpoint URL
     Value: !Sub 'https://${TextbookApi}.execute-api.${AWS::Region}.amazonaws.com/prod/'
-  PDFBucket:
-    Description: S3 bucket for PDFs
-    Value: !Ref TextbookPDFBucket
+  BooksBucket:
+    Description: S3 bucket for EPUB files
+    Value: !Ref TextbookBucket
+  EpubProcessingTopicArn:
+    Description: SNS Topic ARN for EPUB processing notifications
+    Value: !Ref EpubProcessingTopic
+  ProcessEpubFunctionArn:
+    Description: Lambda function ARN for S3 notification configuration
+    Value: !GetAtt ProcessEpubFunction.Arn
+  ProcessEpubFunctionName:
+    Description: Lambda function name for S3 notification configuration
+    Value: !Ref ProcessEpubFunction

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Book, UploadStatus } from '../types';
 import { FileText, Check, Loader2, AlertCircle, Clock } from 'lucide-react';
 
@@ -6,16 +6,50 @@ interface BookListProps {
   books: Book[];
 }
 
-const StatusBadge: React.FC<{ status: UploadStatus }> = ({ status }) => {
+const ProcessingTimer: React.FC<{ startTime: string }> = ({ startTime }) => {
+  const [elapsed, setElapsed] = useState('0s');
+
+  useEffect(() => {
+    const start = new Date(startTime).getTime();
+    
+    const updateTimer = () => {
+      const now = new Date().getTime();
+      const diff = Math.max(0, Math.floor((now - start) / 1000));
+      
+      if (diff < 60) {
+        setElapsed(`${diff}s`);
+      } else {
+        const minutes = Math.floor(diff / 60);
+        const seconds = diff % 60;
+        setElapsed(`${minutes}m ${seconds}s`);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  return <span className="ml-1 font-mono opacity-80">{elapsed}</span>;
+};
+
+const StatusBadge: React.FC<{ status: UploadStatus; startTime?: string }> = ({ status, startTime }) => {
   switch (status) {
     case 'success':
-      return <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-950/30 text-green-400 border border-green-900/30"><Check size={12} /> Uploaded</span>;
+      return <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-950/30 text-green-400 border border-green-900/30 whitespace-nowrap"><Check size={12} /> Uploaded</span>;
     case 'uploading':
-      return <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-blue-950/30 text-blue-400 border border-blue-900/30"><Loader2 size={12} className="animate-spin" /> Uploading</span>;
+      return <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-blue-950/30 text-blue-400 border border-blue-900/30 whitespace-nowrap"><Loader2 size={12} className="animate-spin" /> Uploading</span>;
+    case 'processing':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-amber-950/30 text-amber-400 border border-amber-900/30 whitespace-nowrap">
+          Processing
+          {startTime && <ProcessingTimer startTime={startTime} />}
+        </span>
+      );
     case 'error':
-      return <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-red-950/30 text-red-400 border border-red-900/30"><AlertCircle size={12} /> Failed</span>;
+      return <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-red-950/30 text-red-400 border border-red-900/30 whitespace-nowrap"><AlertCircle size={12} /> Failed</span>;
     default:
-      return <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700"><Clock size={12} /> Queued</span>;
+      return <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700 whitespace-nowrap"><Clock size={12} /> Queued</span>;
   }
 };
 
@@ -56,7 +90,7 @@ const BookList: React.FC<BookListProps> = ({ books }) => {
                 {new Date(book.uploadedAt).toLocaleDateString()}
               </td>
               <td className="px-4 py-3 text-right">
-                <StatusBadge status={book.status} />
+                <StatusBadge status={book.status} startTime={book.processingStartedAt || book.uploadedAt} />
               </td>
             </tr>
           ))}

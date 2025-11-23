@@ -27,7 +27,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, selectedFile, onC
     if (isUploading) return;
 
     const files = e.dataTransfer.files;
-    if (files.length > 0 && files[0].type === 'application/pdf') {
+    if (files.length > 0 && files[0].type === 'application/epub+zip') {
       onFileSelect(files[0]);
     }
   }, [onFileSelect, isUploading]);
@@ -78,7 +78,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, selectedFile, onC
       <input
         type="file"
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-        accept="application/pdf"
+        accept="application/epub+zip"
         onChange={handleFileInput}
         disabled={isUploading}
       />
@@ -87,7 +87,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect, selectedFile, onC
           <UploadCloud size={24} />
         </div>
         <p className="text-sm font-medium text-zinc-300">
-          Drop your PDF here, or <span className="text-blue-400">browse</span>
+          Drop your EPUB here, or <span className="text-blue-400">browse</span>
         </p>
         <p className="text-xs text-zinc-500">Maximum file size 50MB</p>
       </div>

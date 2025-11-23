@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, BookOpen, Type, Minus, Plus, Lightbulb, Sparkles, SkipBack, SkipForward, Bot, X, FileText, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, BookOpen, Type, Minus, Plus, Lightbulb, Sparkles, SkipBack, SkipForward, Bot, X, FileText, AlertTriangle, List } from 'lucide-react';
 import { BookDetails } from '../types';
 import { getBookContent, askQuestion, summarizeChapter } from '../services/backendService';
 import ReactMarkdown from 'react-markdown';
@@ -25,6 +25,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
   // Appearance State
   const [isNightMode, setIsNightMode] = useState(false);
   const [fontSize, setFontSize] = useState(18);
+
+  // Sidebars State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // AI Chat State
   const [isAiAssistOpen, setIsAiAssistOpen] = useState(false);
@@ -57,8 +60,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
         const response = await getBookContent(bookId, currentChapterIndex + 1);
         
         if (response.items && response.items.length > 0) {
-          const formattedText = response.items.map(item => item.paragraphText).join('\n\n');
-          setContent(formattedText);
+          // EPUB content is HTML stored in the 'content' field
+          const htmlContent = response.items[0].content || response.items.map((item: any) => item.paragraphText).join('\n\n');
+          setContent(htmlContent);
         } else {
           setContent("__CONTENT_UNAVAILABLE__");
         }
@@ -172,9 +176,19 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
           <button 
             onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-full transition-colors text-brand-cream/80 hover:text-brand-orange shrink-0"
+            title="Close Reader"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
+          
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors text-brand-cream/80 hover:text-brand-orange shrink-0"
+            title="Table of Contents"
+          >
+            <List className="w-6 h-6" />
+          </button>
+
           <div className="flex flex-col truncate">
             <h2 className="text-white font-bold text-lg leading-none tracking-tight truncate">
               {book.title}
@@ -321,13 +335,55 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
               <h2 className="text-3xl font-bold text-brand-darkBrown mb-8 text-center border-b-2 border-brand-brown/20 pb-6">
                 {book.chapters[currentChapterIndex]}
               </h2>
-              <ReactMarkdown>{content}</ReactMarkdown>
+              <div dangerouslySetInnerHTML={{ __html: content }} />
               <div className="flex justify-center mt-12 text-brand-brown/40">
                 <BookOpen className="w-6 h-6" />
               </div>
             </div>
           )}
         </div>
+      </div>
+
+      {/* Chapter Navigation Sidebar (Left) */}
+      <div className={`absolute top-0 left-0 h-full w-full md:w-80 bg-[#1a110e]/95 backdrop-blur-xl border-r border-[#A1887F]/20 shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          {/* Header */}
+          <div className="p-5 border-b border-[#A1887F]/20 flex items-center justify-between bg-[#2a1d18]/50">
+              <div className="flex items-center gap-2">
+                  <div className="bg-brand-brown p-2 rounded-lg">
+                      <List className="w-5 h-5 text-brand-orange" />
+                  </div>
+                  <h3 className="text-white font-bold text-lg">Chapters</h3>
+              </div>
+              <button onClick={() => setIsSidebarOpen(false)} className="text-brand-cream/40 hover:text-white transition-colors">
+                  <X className="w-6 h-6" />
+              </button>
+          </div>
+          {/* Chapter List */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {book.chapters.map((chapter, index) => (
+                  <button
+                      key={index}
+                      onClick={() => {
+                          setCurrentChapterIndex(index);
+                          setIsSidebarOpen(false);
+                      }}
+                      className={`w-full text-left p-4 rounded-xl transition-all border group relative overflow-hidden ${
+                          currentChapterIndex === index
+                              ? 'bg-brand-orange text-white border-brand-orange shadow-lg'
+                              : 'bg-white/5 text-brand-cream/70 border-transparent hover:bg-white/10 hover:text-white'
+                      }`}
+                  >
+                      <div className="flex items-start gap-3 relative z-10">
+                          <span className={`text-xs font-bold mt-1 px-2 py-0.5 rounded-md ${
+                              currentChapterIndex === index ? 'bg-white/20 text-white' : 'bg-black/20 text-brand-cream/40'
+                          }`}>
+                              {String(index + 1).padStart(2, '0')}
+                          </span>
+                          <span className="font-medium text-sm leading-relaxed">{chapter}</span>
+                      </div>
+                  </button>
+              ))}
+          </div>
       </div>
 
       {/* AI Assist Sidebar */}

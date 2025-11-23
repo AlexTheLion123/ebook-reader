@@ -1,6 +1,6 @@
 import { BookContentResponse, AskResponse, SummarizeResponse, Book } from '../types';
 
-const BASE_URL = 'https://uh999me2ye.execute-api.eu-west-1.amazonaws.com/prod';
+const BASE_URL = 'https://6ga7cukouj.execute-api.eu-west-1.amazonaws.com/prod';
 
 export const getBookContent = async (bookId: string, chapter: number = 1): Promise<BookContentResponse> => {
   try {

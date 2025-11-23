@@ -13,3 +13,13 @@ export const getObject = async (bucket: string, key: string): Promise<Buffer> =>
   const response = await client.send(command);
   return Buffer.from(await response.Body!.transformToByteArray());
 };
+
+export const putObject = async (bucket: string, key: string, body: Buffer | string, contentType: string = 'text/html'): Promise<void> => {
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType
+  });
+  await client.send(command);
+};

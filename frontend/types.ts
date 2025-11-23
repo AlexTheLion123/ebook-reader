@@ -51,6 +51,8 @@ export interface Book {
   description?: string;
   fileName?: string;
   uploadedAt: number;
+  chapters?: string[];
+  chapterCount?: number;
 }
 
 export interface BookListResponse {

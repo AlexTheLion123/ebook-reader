@@ -34,7 +34,7 @@ const ReprocessModal: React.FC<ReprocessModalProps> = ({ isOpen, onClose, onConf
           <div className="p-3 bg-amber-950/30 border border-amber-900/50 rounded-lg flex gap-3">
             <AlertTriangle className="text-amber-500 shrink-0" size={20} />
             <p className="text-amber-200/80 text-xs leading-relaxed">
-              Reprocessing will cost <strong>~$4.50</strong>. This will re-extract all text from the PDF using AWS Textract. Continue?
+              This will re-parse the EPUB file and extract all chapters. Continue?
             </p>
           </div>
         </div>
