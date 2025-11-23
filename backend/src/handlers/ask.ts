@@ -1,41 +1,68 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
-import { queryItems } from '../utils/dynamodb';
-import { invokeModel } from '../utils/bedrock';
+import { getItem } from '../utils/dynamodb';
+import { getObject } from '../utils/s3';
+import { answerQuestion } from '../utils/bedrock';
 import { AskRequest } from '../types';
 
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
-    const { userId, bookId, query }: AskRequest = JSON.parse(event.body || '{}');
+    const { bookId, chapterNumber, question }: AskRequest = JSON.parse(event.body || '{}');
 
-    if (!userId || !bookId || !query) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'userId, bookId, and query required' }) };
+    if (!bookId || !question) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'bookId and question required' }) };
     }
 
-    // Retrieve content (simple: get all paragraphs for now)
-    const items = await queryItems(process.env.CONTENT_TABLE!, `book#${bookId}`, 'chapter#');
-    
-    if (!items.length) {
-      return { statusCode: 404, body: JSON.stringify({ error: 'No content found for book' }) };
+    // Get book metadata for title
+    const bookMeta = await getItem(process.env.CONTENT_TABLE!, { 
+      PK: `book#${bookId}`, 
+      SK: 'metadata' 
+    });
+
+    let context = '';
+
+    if (chapterNumber) {
+      // Question about specific chapter
+      const chapter = await getItem(process.env.CONTENT_TABLE!, { 
+        PK: `book#${bookId}`, 
+        SK: `chapter#${chapterNumber}` 
+      });
+      
+      if (!chapter?.s3Key) {
+        return { statusCode: 404, body: JSON.stringify({ error: 'Chapter not found' }) };
+      }
+
+      const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
+      const htmlContent = contentBuffer.toString('utf-8');
+      context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    } else {
+      // Question about entire book - use first chapter as context for now
+      // TODO: Implement full RAG with embeddings for better cross-chapter search
+      const chapter = await getItem(process.env.CONTENT_TABLE!, { 
+        PK: `book#${bookId}`, 
+        SK: 'chapter#1' 
+      });
+      
+      if (!chapter?.s3Key) {
+        return { statusCode: 404, body: JSON.stringify({ error: 'Book content not found' }) };
+      }
+
+      const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
+      const htmlContent = contentBuffer.toString('utf-8');
+      context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
-    // Build context from paragraphs
-    const context = items
-      .slice(0, 10) // Limit to first 10 paragraphs for MVP
-      .map((item, idx) => `[${idx}] ${item.paragraphText}`)
-      .join('\n\n');
-
-    const systemPrompt = 'You are a helpful study assistant. Use only the provided context to answer questions. Cite sources using [number] format.';
-    const prompt = `CONTEXT:\n${context}\n\nQUESTION: ${query}\n\nANSWER:`;
-
-    const answer = await invokeModel(prompt, systemPrompt);
+    const answer = await answerQuestion(question, context, bookMeta?.title);
 
     return {
       statusCode: 200,
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ answer, userId, bookId })
+      body: JSON.stringify({ answer, bookId, chapterNumber })
     };
   } catch (error) {
-    console.error(error);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to process question' }) };
+    console.error('Question answering error:', error);
+    return { 
+      statusCode: 500, 
+      body: JSON.stringify({ error: 'Failed to process question', details: String(error) }) 
+    };
   }
 };

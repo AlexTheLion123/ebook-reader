@@ -35,14 +35,35 @@ export interface BookContentResponse {
 
 export interface AskResponse {
   answer: string;
-  userId: string;
   bookId: string;
+  chapterNumber: number;
 }
 
 export interface SummarizeResponse {
   summary: string;
   bookId: string;
-  chapter: string;
+  chapterNumber: number;
+  cached: boolean;
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
+}
+
+export interface GenerateQuizResponse {
+  questions: QuizQuestion[];
+  bookId: string;
+  chapterNumber: number;
+  cached: boolean;
+}
+
+export interface EvaluateQuizResponse {
+  isCorrect: boolean;
+  score: number;
+  feedback: string;
 }
 
 export interface Book {

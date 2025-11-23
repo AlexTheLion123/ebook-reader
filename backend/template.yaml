@@ -164,6 +164,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref TextbookContentTable
+        - S3ReadPolicy:
+            BucketName: !Ref TextbookBucket
         - Statement:
             - Effect: Allow
               Action:
@@ -190,8 +192,10 @@ Resources:
       Handler: src/handlers/summarize.handler
       Timeout: 60
       Policies:
-        - DynamoDBReadPolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref TextbookContentTable
+        - S3ReadPolicy:
+            BucketName: !Ref TextbookBucket
         - Statement:
             - Effect: Allow
               Action:
@@ -203,6 +207,62 @@ Resources:
           Properties:
             RestApiId: !Ref TextbookApi
             Path: /summarize
+            Method: post
+
+  GenerateQuizFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/generateQuiz.handler
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+        - S3ReadPolicy:
+            BucketName: !Ref TextbookBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        GenerateQuiz:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /quiz/generate
+            Method: post
+
+  EvaluateAnswerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/evaluateAnswer.handler
+      Timeout: 30
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        EvaluateAnswer:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /quiz/evaluate
             Method: post
 
   ListBooksFunction:

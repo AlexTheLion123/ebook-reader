@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inspect Chapter HTML</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .normal { font-style: normal !important; }
+        .normal * { font-style: normal !important; }
+    </style>
+</head>
+<body>
+    <h1>Test Area</h1>
+    <div class="normal" id="test">
+        <p style="font-style: italic;">This should be normal despite inline style</p>
+    </div>
+    
+    <h2>Console to check actual HTML</h2>
+    <p>Open browser console and paste this:</p>
+    <pre>
+// In your browser console, run this to see the actual HTML structure:
+document.querySelector('.chapter-content').innerHTML
+    </pre>
+</body>
+</html>

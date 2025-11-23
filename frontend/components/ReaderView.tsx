@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, BookOpen, Type, Minus, Plus, Lightbulb, Sparkles, SkipBack, SkipForward, Bot, X, FileText, AlertTriangle, List } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, BookOpen, Type, Minus, Plus, Lightbulb, Sparkles, SkipBack, SkipForward, Bot, X, FileText, AlertTriangle, List, HelpCircle, Send } from 'lucide-react';
 import { BookDetails } from '../types';
-import { getBookContent, askQuestion, summarizeChapter } from '../services/backendService';
+import { getBookContent, askQuestion, summarizeChapter, generateQuiz } from '../services/backendService';
 import ReactMarkdown from 'react-markdown';
 
 interface ReaderViewProps {
@@ -36,7 +36,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
     { id: 'init', role: 'ai', text: "Hello! I'm your literary companion. Feel free to ask me about the characters, themes, or plot of this book." }
   ]);
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [isSummarizing, setIsSummarizing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -96,19 +95,37 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
     }
   };
 
-  const handleSendChat = async (e?: React.FormEvent) => {
+  const handleSendChat = async (e?: React.FormEvent, overrideText?: string) => {
     e?.preventDefault();
-    if (!chatInput.trim()) return;
+    const textToSend = overrideText || chatInput;
+    if (!textToSend.trim()) return;
 
-    const newMessage: ChatMessage = { id: Date.now().toString(), role: 'user', text: chatInput };
+    // Add user message to chat
+    const newMessage: ChatMessage = { id: Date.now().toString(), role: 'user', text: textToSend };
     setChatMessages(prev => [...prev, newMessage]);
     setChatInput('');
+
+    // Check if this is a summarize request
+    if (textToSend.toLowerCase().includes('summarize')) {
+      await handleSummarize();
+      return;
+    }
+
+    // Check if this is a quiz request
+    if (textToSend.toLowerCase().includes('quiz')) {
+      await handleQuiz();
+      return;
+    }
+
     setIsAiThinking(true);
 
     try {
-      const bookId = (book as any).id || "test-book-1";
-      const userId = "test-user-1"; // Mock user ID
-      const response = await askQuestion(userId, bookId, newMessage.text);
+      const bookId = (book as any).id;
+      if (!bookId) {
+        throw new Error('Book ID not available');
+      }
+      const chapterNumber = currentChapterIndex + 1;
+      const response = await askQuestion(bookId, chapterNumber, textToSend);
       
       const aiResponse: ChatMessage = { 
         id: (Date.now() + 1).toString(), 
@@ -121,7 +138,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
       const errorResponse: ChatMessage = { 
         id: (Date.now() + 1).toString(), 
         role: 'ai', 
-        text: "I'm sorry, I encountered an error while processing your request." 
+        text: "I'm sorry, I encountered an error while processing your request. Please make sure the book content is loaded and try again." 
       };
       setChatMessages(prev => [...prev, errorResponse]);
     } finally {
@@ -130,40 +147,87 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
   };
 
   const handleSummarize = async () => {
-    if (isSummarizing) return;
-    setIsSummarizing(true);
+    if (isAiThinking) return;
     
     // Open chat if closed to show summary
     if (!isAiAssistOpen) setIsAiAssistOpen(true);
 
-    // Add a temporary "thinking" message or just rely on isSummarizing state in UI if needed
-    // For now, let's just show the spinner in the button or similar.
-    // Actually, let's add a system message saying we are summarizing.
-    setChatMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      role: 'ai',
-      text: "Generating chapter summary..."
-    }]);
+    setIsAiThinking(true);
 
     try {
-      const bookId = (book as any).id || "test-book-1";
-      const userId = "test-user-1";
-      const response = await summarizeChapter(userId, bookId, (currentChapterIndex + 1).toString());
+      const bookId = (book as any).id;
+      if (!bookId) {
+        throw new Error('Book ID not available');
+      }
+      const chapterNumber = currentChapterIndex + 1;
+      const response = await summarizeChapter(bookId, chapterNumber);
       
+      const summaryText = response.cached 
+        ? `**Chapter ${chapterNumber} Summary** _(cached)_\n\n${response.summary}`
+        : `**Chapter ${chapterNumber} Summary**\n\n${response.summary}`;
+
       setChatMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'ai',
-        text: `**Chapter Summary:**\n\n${response.summary}`
+        text: summaryText
       }]);
     } catch (error) {
       console.error("Summarize error:", error);
       setChatMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'ai',
-        text: "Failed to generate summary."
+        text: "Failed to generate summary. Please make sure the book content is loaded and try again."
       }]);
     } finally {
-      setIsSummarizing(false);
+      setIsAiThinking(false);
+    }
+  };
+
+  const handleQuiz = async () => {
+    if (isAiThinking) return;
+    
+    // Open chat if closed to show quiz
+    if (!isAiAssistOpen) setIsAiAssistOpen(true);
+
+    setIsAiThinking(true);
+
+    try {
+      const bookId = (book as any).id;
+      if (!bookId) {
+        throw new Error('Book ID not available');
+      }
+      const chapterNumber = currentChapterIndex + 1;
+      const response = await generateQuiz(bookId, chapterNumber, 3);
+      
+      // Format quiz questions
+      let quizText = response.cached 
+        ? `**Chapter ${chapterNumber} Quiz** _(cached)_\n\n`
+        : `**Chapter ${chapterNumber} Quiz**\n\n`;
+      
+      response.questions.forEach((q, index) => {
+        quizText += `**Question ${index + 1}:** ${q.question}\n\n`;
+        q.options.forEach((option, optIndex) => {
+          quizText += `${String.fromCharCode(97 + optIndex)}) ${option}\n`;
+        });
+        quizText += `\n`;
+      });
+      
+      quizText += `*Think about your answers and reply with your choices (e.g., "1a, 2b, 3c").*`;
+
+      setChatMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'ai',
+        text: quizText
+      }]);
+    } catch (error) {
+      console.error("Quiz generation error:", error);
+      setChatMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'ai',
+        text: "Failed to generate quiz. Please make sure the book content is loaded and try again."
+      }]);
+    } finally {
+      setIsAiThinking(false);
     }
   };
 
@@ -261,20 +325,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
           </button>
 
           <div className="w-px h-4 bg-white/10"></div>
-
-          {/* Summarize Button */}
-          <button 
-            onClick={handleSummarize}
-            disabled={isSummarizing}
-            className={`p-1.5 rounded-full transition-all duration-300 ${
-              isSummarizing 
-              ? 'text-brand-orange bg-white/10 animate-pulse' 
-              : 'text-brand-cream/60 hover:text-brand-orange'
-            }`}
-            title="Summarize Chapter"
-          >
-            <FileText className="w-5 h-5" />
-          </button>
 
           {/* AI Assist Toggle */}
           <button 
@@ -431,6 +481,31 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
               </button>
           </div>
 
+          {/* Quick Actions */}
+          <div className="p-4 border-b border-[#A1887F]/20 bg-[#2a1d18]/30 grid grid-cols-2 gap-3">
+            <button
+              onClick={() => handleSendChat(undefined, "Please summarize this chapter.")}
+              disabled={isAiThinking}
+              className="flex flex-col items-center justify-center p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-2 group"
+            >
+              <div className="p-2 rounded-full bg-brand-orange/10 text-brand-orange group-hover:bg-brand-orange group-hover:text-white transition-colors">
+                <FileText className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-brand-cream/80 group-hover:text-white">Summarize</span>
+            </button>
+
+            <button
+              onClick={() => handleSendChat(undefined, "Give me a short quiz for this chapter.")}
+              disabled={isAiThinking}
+              className="flex flex-col items-center justify-center p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-2 group"
+            >
+              <div className="p-2 rounded-full bg-brand-orange/10 text-brand-orange group-hover:bg-brand-orange group-hover:text-white transition-colors">
+                <HelpCircle className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-brand-cream/80 group-hover:text-white">Take Quiz</span>
+            </button>
+          </div>
+
           {/* Chat Area */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {chatMessages.map((msg) => (
@@ -440,7 +515,15 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
                           ? 'bg-brand-orange text-white rounded-tr-none shadow-lg' 
                           : 'bg-[#3E2723] text-brand-cream border border-[#A1887F]/20 rounded-tl-none'
                       }`}>
-                          {msg.text}
+                          {msg.role === 'ai' ? <ReactMarkdown components={{
+                             p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
+                             ul: ({children}) => <ul className="list-disc ml-4 mb-2 space-y-0.5">{children}</ul>,
+                             li: ({children}) => <li>{children}</li>,
+                             h1: ({children}) => <h1 className="text-base font-bold mb-2 text-brand-orange">{children}</h1>,
+                             h2: ({children}) => <h2 className="text-base font-bold mb-1.5 text-brand-orange">{children}</h2>,
+                             h3: ({children}) => <h3 className="text-sm font-bold mb-1 text-brand-orange">{children}</h3>,
+                             strong: ({children}) => <span className="font-bold text-brand-orange/90">{children}</span>
+                          }}>{msg.text}</ReactMarkdown> : msg.text}
                       </div>
                   </div>
               ))}
@@ -468,10 +551,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
                   />
                   <button 
                       type="submit"
-                      disabled={!chatInput.trim()}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-brand-orange text-white rounded-lg hover:bg-brand-darkOrange transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!chatInput.trim() || isAiThinking}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-brand-orange text-white rounded-lg hover:bg-brand-darkOrange transition-colors disabled:opacity-50 disabled:hover:bg-brand-orange"
                   >
-                      <ArrowLeft className="w-4 h-4 rotate-180" />
+                      <Send className="w-4 h-4" />
                   </button>
               </form>
           </div>

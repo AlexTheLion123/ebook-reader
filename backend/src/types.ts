@@ -23,14 +23,12 @@ export interface UserProgress {
 }
 
 export interface AskRequest {
-  userId: string;
   bookId: string;
-  query: string;
-  sessionId?: string;
+  chapterNumber?: number;
+  question: string;
 }
 
 export interface SummarizeRequest {
-  userId: string;
   bookId: string;
-  chapter?: number;
+  chapterNumber: number;
 }

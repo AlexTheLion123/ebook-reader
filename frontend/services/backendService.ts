@@ -1,4 +1,4 @@
-import { BookContentResponse, AskResponse, SummarizeResponse, Book } from '../types';
+import { BookContentResponse, AskResponse, SummarizeResponse, GenerateQuizResponse, EvaluateQuizResponse, Book } from '../types';
 
 const BASE_URL = 'https://6ga7cukouj.execute-api.eu-west-1.amazonaws.com/prod';
 
@@ -15,14 +15,14 @@ export const getBookContent = async (bookId: string, chapter: number = 1): Promi
   }
 };
 
-export const askQuestion = async (userId: string, bookId: string, query: string): Promise<AskResponse> => {
+export const askQuestion = async (bookId: string, chapterNumber: number, question: string): Promise<AskResponse> => {
   try {
     const response = await fetch(`${BASE_URL}/ask`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ userId, bookId, query }),
+      body: JSON.stringify({ bookId, chapterNumber, question }),
     });
 
     if (!response.ok) {
@@ -35,14 +35,14 @@ export const askQuestion = async (userId: string, bookId: string, query: string)
   }
 };
 
-export const summarizeChapter = async (userId: string, bookId: string, chapter?: string): Promise<SummarizeResponse> => {
+export const summarizeChapter = async (bookId: string, chapterNumber: number): Promise<SummarizeResponse> => {
   try {
     const response = await fetch(`${BASE_URL}/summarize`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ userId, bookId, chapter }),
+      body: JSON.stringify({ bookId, chapterNumber }),
     });
 
     if (!response.ok) {
@@ -51,6 +51,46 @@ export const summarizeChapter = async (userId: string, bookId: string, chapter?:
     return await response.json();
   } catch (error) {
     console.error('Error summarizing chapter:', error);
+    throw error;
+  }
+};
+
+export const generateQuiz = async (bookId: string, chapterNumber: number, questionCount?: number): Promise<GenerateQuizResponse> => {
+  try {
+    const response = await fetch(`${BASE_URL}/quiz/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ bookId, chapterNumber, questionCount }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to generate quiz: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error generating quiz:', error);
+    throw error;
+  }
+};
+
+export const evaluateQuiz = async (question: string, userAnswer: string, correctAnswer: string, type: 'multiple-choice' | 'short-answer'): Promise<EvaluateQuizResponse> => {
+  try {
+    const response = await fetch(`${BASE_URL}/quiz/evaluate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ question, userAnswer, correctAnswer, type }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to evaluate quiz: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error evaluating quiz:', error);
     throw error;
   }
 };
