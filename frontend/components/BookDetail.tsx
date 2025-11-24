@@ -1,34 +1,24 @@
-import React, { useState, useRef } from 'react';
-import { ArrowLeft, Star, BookOpen, ChevronDown, ChevronUp, List, PlayCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowLeft, Star, BookOpen, ChevronDown, ChevronUp, List, PlayCircle, BrainCircuit } from 'lucide-react';
 import { BookDetails } from '../types';
 
 interface BookDetailProps {
   book: BookDetails;
   onBack: () => void;
   onRead: (chapterIndex: number) => void;
+  onTest: () => void;
 }
 
-export const BookDetail: React.FC<BookDetailProps> = ({ book, onBack, onRead }) => {
+export const BookDetail: React.FC<BookDetailProps> = ({ book, onBack, onRead, onTest }) => {
   const [isChaptersOpen, setIsChaptersOpen] = useState(true);
-  const chaptersRef = useRef<HTMLDivElement>(null);
-
-  const toggleChapters = () => {
-    const newState = !isChaptersOpen;
-    setIsChaptersOpen(newState);
-    
-    if (newState) {
-      setTimeout(() => {
-        chaptersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
-    }
-  };
 
   return (
     <div className="animate-fade-in max-w-4xl mx-auto pb-20">
+      
       {/* Back Button */}
       <button 
         onClick={onBack}
-        className="flex items-center text-brand-cream/80 hover:text-brand-orange transition-colors mb-6 font-medium group"
+        className="flex items-center text-brand-cream/80 hover:text-brand-orange transition-colors mb-4 md:mb-6 font-medium group"
       >
         <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
         Back to Search
@@ -38,14 +28,14 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, onBack, onRead }) 
       <div className="bg-[#3E2723]/90 backdrop-blur-lg border border-[#A1887F]/30 rounded-2xl shadow-2xl overflow-hidden">
         
         {/* Header Section */}
-        <div className="p-8 md:p-10 border-b border-[#A1887F]/20 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-6 opacity-10">
+        <div className="p-6 md:p-10 border-b border-[#A1887F]/20 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-6 opacity-10 hidden md:block">
             <BookOpen className="w-40 h-40 text-white" />
           </div>
           
           <div className="relative z-10">
             <div className="flex flex-wrap gap-3 mb-4">
-              <span className="bg-brand-orange/90 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-md inline-flex items-center justify-center">
+              <span className="bg-brand-orange/90 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-md">
                 Recommended Read
               </span>
               <div className="flex items-center bg-black/40 px-3 py-1 rounded-full border border-white/10">
@@ -54,29 +44,39 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, onBack, onRead }) 
               </div>
             </div>
             
-            <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-2 leading-tight tracking-tight">
+            <h1 className="text-3xl md:text-5xl font-extrabold text-white mb-2 leading-tight tracking-tight">
               {book.title}
             </h1>
-            <p className="text-xl md:text-2xl text-brand-lightBrown font-serif italic mb-8">
+            <p className="text-lg md:text-2xl text-brand-lightBrown font-serif italic mb-6 md:mb-8">
               by {book.author}
             </p>
 
-            {/* Primary Action Button */}
-            <button 
-              onClick={() => onRead(0)}
-              className="flex items-center gap-2 bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-3 px-8 rounded-full shadow-lg shadow-brand-orange/30 transition-all hover:scale-105 hover:shadow-xl"
-            >
-              <PlayCircle className="w-5 h-5 fill-current" />
-              Start Reading
-            </button>
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-3 md:gap-4">
+              <button 
+                onClick={() => onRead(0)}
+                className="flex items-center justify-center gap-2 bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-2.5 px-6 md:py-3 md:px-8 rounded-full shadow-lg shadow-brand-orange/30 transition-all hover:scale-105 hover:shadow-xl w-full sm:w-auto"
+              >
+                <PlayCircle className="w-5 h-5 fill-current" />
+                Start Reading
+              </button>
+
+              <button 
+                onClick={onTest}
+                className="flex items-center justify-center gap-2 bg-[#5D4037] hover:bg-[#6D4C41] border border-[#A1887F]/30 text-white font-bold py-2.5 px-6 md:py-3 md:px-6 rounded-full shadow-lg transition-all hover:scale-105 hover:border-brand-orange/50 group w-full sm:w-auto"
+              >
+                <BrainCircuit className="w-5 h-5 text-brand-orange group-hover:text-white transition-colors" />
+                Test Yourself
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Content Section */}
-        <div className="p-8 md:p-10">
+        <div className="p-6 md:p-10">
           
           {/* Synopsis */}
-          <div className="mb-10">
+          <div className="mb-8 md:mb-10">
             <h3 className="text-lg font-bold text-brand-orange mb-3 uppercase tracking-wide">Synopsis</h3>
             <p className="text-lg text-brand-cream/90 leading-relaxed font-light">
               {book.longDescription}
@@ -84,10 +84,10 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, onBack, onRead }) 
           </div>
 
           {/* Chapters Dropdown */}
-          <div ref={chaptersRef} className="border border-[#A1887F]/30 rounded-xl bg-black/20 overflow-hidden transition-all duration-300">
+          <div className="border border-[#A1887F]/30 rounded-xl bg-black/20 overflow-hidden transition-all duration-300">
             <button 
-              onClick={toggleChapters}
-              className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors text-left"
+              onClick={() => setIsChaptersOpen(!isChaptersOpen)}
+              className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-white/5 transition-colors text-left"
             >
               <div className="flex items-center gap-3">
                 <div className="bg-brand-brown p-2 rounded-lg">
@@ -113,7 +113,7 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, onBack, onRead }) 
                 isChaptersOpen ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
               }`}
             >
-              <div className="p-5 pt-0 border-t border-white/5">
+              <div className="p-4 md:p-5 pt-0 border-t border-white/5">
                 <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
                   {book.chapters.map((chapter, index) => (
                     <li 

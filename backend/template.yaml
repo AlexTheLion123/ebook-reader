@@ -359,6 +359,28 @@ Resources:
             Path: /books/{bookId}/reprocess
             Method: post
 
+  HideBookFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/hideBook.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+      Events:
+        HideBook:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /books/{bookId}/hide
+            Method: patch
+
   # SNS Topic for EPUB Processing Notifications
   EpubProcessingTopic:
     Type: AWS::SNS::Topic

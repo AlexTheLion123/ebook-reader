@@ -1,4 +1,5 @@
 {
-  "name": "Cozy Library AI",
-  "description": "A beautiful AI-powered library search interface featuring a cozy, warm aesthetic and smart book recommendations."
+  "name": "Cozy Library",
+  "description": "A beautiful AI-powered library search interface featuring a cozy, warm aesthetic and smart book recommendations.",
+  "requestFramePermissions": []
 }

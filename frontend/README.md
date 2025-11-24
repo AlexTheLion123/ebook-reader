@@ -1,48 +1,20 @@
-# QuickBook
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-A simple library browsing application built with React, TypeScript, and Vite.
+# Run and deploy your AI Studio app
 
-## Features
+This contains everything you need to run your app locally.
 
-- Landing page with search functionality.
-- Responsive design.
+View your app in AI Studio: https://ai.studio/apps/drive/1pb5Fy-YNkytOA-ghI6HkIan1ut_jMWFr
 
-## Getting Started
+## Run Locally
 
-1.  Install dependencies:
-    ```bash
-    npm install
-    ```
+**Prerequisites:**  Node.js
 
-2.  Run the development server:
-    ```bash
-    npm run dev
-    ```
 
-3.  Build for production:
-    ```bash
-    npm run build
-    ```
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

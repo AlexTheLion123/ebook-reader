@@ -12,19 +12,19 @@ export const invokeModel = async (
   systemPrompt?: string,
   options: InvokeModelOptions = {}
 ): Promise<string> => {
-  const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+  const fullPrompt = systemPrompt 
+    ? `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n${systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`
+    : `<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
   
   const body = {
-    inputText: fullPrompt,
-    textGenerationConfig: {
-      maxTokenCount: options.maxTokens || 2000,
-      temperature: options.temperature || 0.7,
-      topP: 0.9
-    }
+    prompt: fullPrompt,
+    max_gen_len: options.maxTokens || 2000,
+    temperature: options.temperature || 0.7,
+    top_p: 0.9
   };
 
   const command = new InvokeModelCommand({
-    modelId: 'amazon.titan-text-express-v1',
+    modelId: 'meta.llama3-8b-instruct-v1:0',
     contentType: 'application/json',
     accept: 'application/json',
     body: JSON.stringify(body)
@@ -32,7 +32,7 @@ export const invokeModel = async (
 
   const response = await client.send(command);
   const result = JSON.parse(new TextDecoder().decode(response.body));
-  return result.results[0].outputText;
+  return result.generation;
 };
 
 export const generateChapterSummary = async (chapterContent: string, chapterTitle: string): Promise<string> => {

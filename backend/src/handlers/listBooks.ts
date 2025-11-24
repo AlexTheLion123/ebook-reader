@@ -5,10 +5,10 @@ export const handler: APIGatewayProxyHandler = async () => {
   try {
     const allBooks = await queryByType(process.env.CONTENT_TABLE!, 'book');
     
-    // Only return books that have successfully completed processing
+    // Only return books that have successfully completed processing and are not hidden
     const booksWithChapters = await Promise.all(
       allBooks
-        .filter(book => book.processingStatus === 'success')
+        .filter(book => book.processingStatus === 'success' && !book.hidden)
         .map(async (book) => {
           const bookId = book.PK?.replace('book#', '') || book.bookId;
           

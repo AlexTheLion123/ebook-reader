@@ -106,19 +106,44 @@ export const listFrontendBooks = async (): Promise<FrontendBook[]> => {
   }
 };
 
-// Delete a book from the backend (requires implementing backend endpoint)
-export const deleteBook = async (bookId: string): Promise<void> => {
+// Hide a book from the frontend (soft delete)
+export const hideBook = async (bookId: string): Promise<void> => {
   try {
-    const response = await fetch(`${FRONTEND_API_BASE}/books/${bookId}`, {
-      method: 'DELETE',
+    const response = await fetch(`${FRONTEND_API_BASE}/books/${bookId}/hide`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ hidden: true }),
     });
     
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to delete book: ${response.statusText} - ${errorText}`);
+      throw new Error(`Failed to hide book: ${response.statusText} - ${errorText}`);
     }
   } catch (error) {
-    console.error('Error deleting book:', error);
+    console.error('Error hiding book:', error);
+    throw error;
+  }
+};
+
+// Unhide a book (restore to frontend)
+export const unhideBook = async (bookId: string): Promise<void> => {
+  try {
+    const response = await fetch(`${FRONTEND_API_BASE}/books/${bookId}/hide`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ hidden: false }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to unhide book: ${response.statusText} - ${errorText}`);
+    }
+  } catch (error) {
+    console.error('Error unhiding book:', error);
     throw error;
   }
 };

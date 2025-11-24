@@ -21,19 +21,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onEnterApp }) => {
   return (
     <div className="flex flex-col items-start justify-center h-full w-full max-w-2xl px-6 md:px-12 lg:px-20 pt-20 md:pt-0 animate-fade-in">
       {/* Main Headline - Classic White Theme */}
-      <h1 
-        className="text-5xl md:text-7xl font-extrabold text-white mb-6 tracking-tight leading-[1.1]"
-        style={{ textShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
-      >
+      <h1 className="text-5xl md:text-7xl font-extrabold text-white mb-6 tracking-tight leading-[1.1] drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
         Browse our <br />
         Library
       </h1>
 
       {/* Subtext */}
-      <p 
-        className="text-lg md:text-xl text-gray-300 mb-10 max-w-lg leading-relaxed font-medium"
-        style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}
-      >
+      <p className="text-lg md:text-xl text-gray-300 mb-10 max-w-lg leading-relaxed font-medium drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
         Learn how books can expand your horizons and direct your learning journey. 
         Discover new worlds within our curated collection.
       </p>

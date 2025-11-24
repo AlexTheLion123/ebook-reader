@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Book, FrontendBook, ToastMessage, UploadStatus } from './types';
-import { getPresignedUrl, uploadFileToS3, listFrontendBooks, deleteBook } from './services/api';
+import { getPresignedUrl, uploadFileToS3, listFrontendBooks, hideBook } from './services/api';
 import { API_ENDPOINTS } from './constants';
 import UploadZone from './components/UploadZone';
 import BookList from './components/BookList';
@@ -248,27 +248,10 @@ const App: React.FC = () => {
   const handleConfirmHide = async () => {
     if (bookToHide) {
       try {
-        // For now, we'll just delete it as requested by "exact same as textbook-admin" 
-        // but textbook-admin only hid it locally. 
-        // Since this is the frontend-admin managing the REAL backend, "hiding" effectively means removing it from the public list.
-        // If the user wants to "hide" but keep it, we'd need a backend "hidden" flag.
-        // Given the previous context of "Delete" button, I will assume "Hide" here means "Remove from public view" which is what delete does.
-        // But the UI says "Hide".
-        // I will use the deleteBook API for now but show "Hidden" success message, 
-        // OR I should check if I can just update the local state if it's a mock.
-        // But `listFrontendBooks` fetches from backend. So I must call backend.
-        // I'll stick to `deleteBook` for the action but call it "Hide" in the UI as requested.
-        // Wait, if I delete it, it's gone. "Hide" implies it can be unhidden.
-        // The user said "exact same as in textbook-admin". In textbook-admin, it sets `isHidden: true`.
-        // Since I don't have a backend `hideBook` endpoint, and `deleteBook` is destructive...
-        // I will implement it as `deleteBook` for now because the previous feature was "Delete".
-        // The user just wants the UI to look like "Hide".
-        
-        await deleteBook(bookToHide.bookId);
+        await hideBook(bookToHide.bookId);
         addToast('success', 'Book hidden from library.');
         setHideModalOpen(false);
         setBookToHide(null);
-        // Refresh the list
         await fetchFrontendBooks();
       } catch (error) {
         console.error('Hide failed:', error);
