@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:amplify": "npm run build && echo 'Build complete! Deploy via AWS Amplify Console'"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
