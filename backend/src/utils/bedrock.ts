@@ -1,6 +1,6 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
-const client = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'us-east-1' });
+const client = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'eu-west-1' });
 
 interface InvokeModelOptions {
   maxTokens?: number;
@@ -16,18 +16,16 @@ export const invokeModel = async (
     ? `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n${systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`
     : `<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
   
-  const body = {
-    prompt: fullPrompt,
-    max_gen_len: options.maxTokens || 2000,
-    temperature: options.temperature || 0.7,
-    top_p: 0.9
-  };
-
   const command = new InvokeModelCommand({
-    modelId: 'meta.llama3-8b-instruct-v1:0',
+    modelId: 'meta.llama3-2-3b-instruct-v1:0',
     contentType: 'application/json',
     accept: 'application/json',
-    body: JSON.stringify(body)
+    body: JSON.stringify({
+      prompt: fullPrompt,
+      max_gen_len: options.maxTokens || 2000,
+      temperature: options.temperature || 0.7,
+      top_p: 0.9
+    })
   });
 
   const response = await client.send(command);
