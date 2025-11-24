@@ -394,18 +394,9 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
           {/* Main Question Area */}
           <div className="flex flex-col items-center justify-start w-full max-w-3xl mx-auto pb-6">
             <div className="w-full mb-4 md:mb-8">
-                <div className="flex items-start justify-between gap-4 mb-6 md:mb-8">
-                    <h3 className="text-xl md:text-3xl lg:text-4xl font-bold text-white leading-snug drop-shadow-sm">
-                        {currentQuestion.text}
-                    </h3>
-                    <button 
-                        onClick={() => setIsAiAssistOpen(true)}
-                        className="shrink-0 p-3 rounded-full bg-white/5 hover:bg-brand-orange/20 text-brand-cream/40 hover:text-brand-orange transition-colors border border-white/5 hover:border-brand-orange/30 group"
-                        title="Get a hint"
-                    >
-                        <Lightbulb className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                    </button>
-                </div>
+                <h3 className="text-xl md:text-3xl lg:text-4xl font-bold text-white mb-6 md:mb-8 leading-snug drop-shadow-sm">
+                    {currentQuestion.text}
+                </h3>
 
                 {/* Answer Area */}
                 <div className="space-y-3 md:space-y-4 w-full">
@@ -694,7 +685,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                      {step === 'QUIZ' && (
                          <button 
                             onClick={() => setIsAiAssistOpen(true)}
-                            className="bg-brand-orange/10 p-2 rounded-full border border-brand-orange/20 flex items-center justify-center text-brand-orange hover:bg-brand-orange hover:text-white transition-colors group relative"
+                            className="flex items-center justify-center p-2 rounded-full bg-white/5 hover:bg-brand-orange/20 text-brand-cream/40 hover:text-brand-orange transition-colors border border-white/5 hover:border-brand-orange/30 group relative"
                             title="Get Help"
                          >
                              <HelpCircle className="w-5 h-5" />
@@ -717,14 +708,14 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
       {/* AI Assist Sidebar (Right) */}
       <div className={`absolute top-0 right-0 h-full w-full md:w-96 bg-[#1a110e]/95 backdrop-blur-xl border-l border-[#A1887F]/20 shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${isAiAssistOpen ? 'translate-x-0' : 'translate-x-full'}`}>
           {/* Sidebar Header */}
-          <div className="p-5 border-b border-[#A1887F]/20 flex items-center justify-between bg-[#2a1d18]/50">
+          <div className="p-3 md:p-5 border-b border-[#A1887F]/20 flex items-center justify-between bg-[#2a1d18]/50">
               <div className="flex items-center gap-2">
                   <div className="bg-brand-orange/20 p-2 rounded-lg">
                       <Bot className="w-5 h-5 text-brand-orange" />
                   </div>
                   <div>
-                      <h3 className="text-white font-bold text-lg">AI Tutor</h3>
-                      <p className="text-xs text-brand-cream/50">Hints & Explanations</p>
+                      <h3 className="text-white font-bold text-base md:text-lg">AI Tutor</h3>
+                      <p className="text-[10px] md:text-xs text-brand-cream/50">Hints & Explanations</p>
                   </div>
               </div>
               <button onClick={() => setIsAiAssistOpen(false)} className="text-brand-cream/40 hover:text-white transition-colors">
