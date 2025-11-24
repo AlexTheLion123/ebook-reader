@@ -4,9 +4,13 @@ import { getObject } from '../utils/s3';
 import { answerQuestion } from '../utils/bedrock';
 import { AskRequest } from '../types';
 
+interface ExtendedAskRequest extends AskRequest {
+  quizMode?: boolean;
+}
+
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
-    const { bookId, chapterNumber, question }: AskRequest = JSON.parse(event.body || '{}');
+    const { bookId, chapterNumber, question, quizMode }: ExtendedAskRequest = JSON.parse(event.body || '{}');
 
     if (!bookId || !question) {
       return { statusCode: 400, body: JSON.stringify({ error: 'bookId and question required' }) };
@@ -51,7 +55,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
-    const answer = await answerQuestion(question, context, bookMeta?.title);
+    const answer = await answerQuestion(question, context, bookMeta?.title, quizMode);
 
     return {
       statusCode: 200,

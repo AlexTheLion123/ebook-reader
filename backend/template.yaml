@@ -265,6 +265,36 @@ Resources:
             Path: /quiz/evaluate
             Method: post
 
+  HintFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/hint.handler
+      Timeout: 60
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TextbookContentTable
+        - S3ReadPolicy:
+            BucketName: !Ref TextbookBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        Hint:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /hint
+            Method: post
+
   ListBooksFunction:
     Type: AWS::Serverless::Function
     Metadata:

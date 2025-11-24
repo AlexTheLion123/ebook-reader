@@ -51,10 +51,21 @@ ${chapterContent.slice(0, 50000)}`; // Limit to ~50k chars to stay within token 
   return invokeModel(prompt, systemPrompt, { maxTokens: 1000 });
 };
 
-export const answerQuestion = async (question: string, context: string, bookTitle?: string): Promise<string> => {
-  const systemPrompt = `You are a helpful study assistant. Answer questions based on the provided book content. Be accurate and cite specific information from the text when possible.`;
+export const answerQuestion = async (question: string, context: string, bookTitle?: string, quizMode?: boolean): Promise<string> => {
+  const systemPrompt = quizMode
+    ? `You are a helpful tutor assisting a student during a quiz. IMPORTANT: Never directly give away answers to quiz questions. Instead, guide students to discover answers themselves through hints, questions, and explanations of concepts. Help them learn, don't just tell them the answer.`
+    : `You are a helpful study assistant. Answer questions based on the provided book content. Be accurate and cite specific information from the text when possible.`;
   
-  const prompt = `Based on the following content${bookTitle ? ` from "${bookTitle}"` : ''}, answer this question:
+  const prompt = quizMode
+    ? `A student taking a quiz has a question. Help them understand the concept without giving away the answer.
+
+Their question: ${question}
+
+Book content${bookTitle ? ` from "${bookTitle}"` : ''}:
+${context.slice(0, 50000)}
+
+Provide guidance that helps them think through the problem, but don't state the answer directly.`
+    : `Based on the following content${bookTitle ? ` from "${bookTitle}"` : ''}, answer this question:
 
 Question: ${question}
 

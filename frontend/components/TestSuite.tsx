@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, Bot, Send, Sparkles, HelpCircle, Lightbulb } from 'lucide-react';
 import { BookDetails } from '../types';
-import { askQuestion } from '../services/backendService';
+import { askQuestion, getHint } from '../services/backendService';
 import ReactMarkdown from 'react-markdown';
 
 interface ChatMessage {
@@ -100,9 +100,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   // AI Assist State
   const [isAiAssistOpen, setIsAiAssistOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    { id: 'init', role: 'ai', text: "Stuck on a question? I can help you with a hint or answer your questions about the book context." }
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [hintLevel, setHintLevel] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -132,11 +130,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   // Reset hint when question changes
   useEffect(() => {
     setHintLevel(0);
-    setChatMessages(prev => [...prev, { 
-        id: Date.now().toString(), 
-        role: 'ai', 
-        text: `**New Question:** ${MOCK_QUESTIONS[currentQuestionIndex % MOCK_QUESTIONS.length].text}` 
-    }]);
+    setChatMessages([]);
   }, [currentQuestionIndex]);
 
   // Scroll chat
@@ -202,7 +196,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
       
       const chapterNumber = 1; 
 
-      const response = await askQuestion(bookId, chapterNumber, contextPrompt);
+      const response = await askQuestion(bookId, chapterNumber, contextPrompt, true);
       
       const aiResponse: ChatMessage = { 
         id: (Date.now() + 1).toString(), 
@@ -239,23 +233,20 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
       try {
           const bookId = (book as any).id;
-          const chapterNumber = 1; 
+          const chapterNumber = 1;
           
-          let prompt = "";
-          if (nextLevel === 1) {
-              prompt = `Provide a very subtle, light nudge hint for the question: "${currentQuestion.text}". Do not give the answer.`;
-          } else if (nextLevel === 2) {
-              prompt = `Provide a deeper, more helpful hint for the question: "${currentQuestion.text}". Point me in the right direction but don't give the answer yet.`;
-          } else {
-              prompt = `Provide a near-solution explanation for the question: "${currentQuestion.text}". Explain the concept clearly so I can answer it.`;
-          }
-
-          const response = await askQuestion(bookId, chapterNumber, prompt);
+          const response = await getHint(
+              bookId, 
+              currentQuestion.text, 
+              nextLevel as 1 | 2 | 3,
+              chapterNumber,
+              currentQuestion.type
+          );
           
           setChatMessages(prev => [...prev, {
               id: (Date.now() + 1).toString(),
               role: 'ai',
-              text: `**Hint Level ${nextLevel}:**\n\n${response.answer}`
+              text: `**Hint Level ${nextLevel}:**\n\n${response.hint}`
           }]);
       } catch (error) {
           setChatMessages(prev => [...prev, {
@@ -725,21 +716,25 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
           {/* Quick Hint Section */}
           <div className="p-4 border-b border-[#A1887F]/20 bg-[#2a1d18]/30">
-
+            
+            <div className="mb-2 p-3 bg-black/20 rounded-lg border border-white/5">
+                <p className="text-xs font-bold text-brand-orange mb-1 uppercase tracking-wider">Current Question</p>
+                <p className="text-sm text-brand-cream/90 leading-relaxed">{currentQuestion.text}</p>
+            </div>
 
             {hintLevel < 3 && (
                 <button 
                     onClick={handleRevealHint}
                     disabled={isAiThinking}
-                    className="w-full flex flex-row md:flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-3 md:gap-2 group"
+                    className="w-full flex flex-row md:flex-col items-center justify-center p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-2 md:gap-2 group"
                 >
                     {isAiThinking ? (
-                        <div className="p-2 rounded-full bg-brand-orange/10 text-brand-orange">
-                            <div className="w-5 h-5 border-2 border-brand-orange/50 border-t-brand-orange rounded-full animate-spin" />
+                        <div className="p-1.5 rounded-full bg-brand-orange/10 text-brand-orange">
+                            <div className="w-4 h-4 border-2 border-brand-orange/50 border-t-brand-orange rounded-full animate-spin" />
                         </div>
                     ) : (
-                        <div className="p-2 rounded-full bg-brand-orange/10 text-brand-orange group-hover:bg-brand-orange group-hover:text-white transition-colors">
-                            <Sparkles className="w-5 h-5" />
+                        <div className="p-1.5 rounded-full bg-brand-orange/10 text-brand-orange group-hover:bg-brand-orange group-hover:text-white transition-colors">
+                            <Sparkles className="w-4 h-4" />
                         </div>
                     )}
                     <div className="flex items-center gap-2">

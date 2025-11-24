@@ -15,14 +15,14 @@ export const getBookContent = async (bookId: string, chapter: number = 1): Promi
   }
 };
 
-export const askQuestion = async (bookId: string, chapterNumber: number, question: string): Promise<AskResponse> => {
+export const askQuestion = async (bookId: string, chapterNumber: number, question: string, quizMode?: boolean): Promise<AskResponse> => {
   try {
     const response = await fetch(`${BASE_URL}/ask`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ bookId, chapterNumber, question }),
+      body: JSON.stringify({ bookId, chapterNumber, question, quizMode }),
     });
 
     if (!response.ok) {
@@ -106,6 +106,39 @@ export const listBooks = async (): Promise<Book[]> => {
     return data.books || [];
   } catch (error) {
     console.error('Error listing books:', error);
+    throw error;
+  }
+};
+
+export interface HintResponse {
+  hint: string;
+  hintLevel: number;
+  bookId: string;
+  chapterNumber: number;
+}
+
+export const getHint = async (
+  bookId: string, 
+  question: string, 
+  hintLevel: 1 | 2 | 3,
+  chapterNumber?: number,
+  questionType?: 'MCQ' | 'SHORT_ANSWER' | 'FILL_BLANK' | 'TRUE_FALSE'
+): Promise<HintResponse> => {
+  try {
+    const response = await fetch(`${BASE_URL}/hint`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ bookId, question, hintLevel, chapterNumber, questionType }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get hint: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error getting hint:', error);
     throw error;
   }
 };

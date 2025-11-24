@@ -32,3 +32,11 @@ export interface SummarizeRequest {
   bookId: string;
   chapterNumber: number;
 }
+
+export interface HintRequest {
+  bookId: string;
+  chapterNumber?: number;
+  question: string;
+  hintLevel: 1 | 2 | 3;
+  questionType?: 'MCQ' | 'SHORT_ANSWER' | 'FILL_BLANK' | 'TRUE_FALSE';
+}
