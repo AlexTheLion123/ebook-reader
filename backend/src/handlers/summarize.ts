@@ -41,16 +41,17 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       return { statusCode: 404, body: JSON.stringify({ error: 'Chapter not found' }) };
     }
 
-    // Get chapter content from S3
-    if (!chapter.s3Key) {
+    // Get chapter content - use textContent if available (TeX books), otherwise fetch from S3
+    let textContent: string;
+    if (chapter.textContent) {
+      textContent = chapter.textContent;
+    } else if (chapter.s3Key) {
+      const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
+      const htmlContent = contentBuffer.toString('utf-8');
+      textContent = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    } else {
       return { statusCode: 404, body: JSON.stringify({ error: 'Chapter content not available' }) };
     }
-
-    const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
-    const htmlContent = contentBuffer.toString('utf-8');
-    
-    // Strip HTML tags for better processing
-    const textContent = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
     // Generate summary using Bedrock
     console.log(`Generating summary for ${bookId} chapter ${chapterNumber}`);

@@ -1,0 +1,107 @@
+\documentclass{book}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{Introduction to Calculus}
+\author{Test Author}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\chapter{Limits and Continuity}
+
+\section{Understanding Limits}
+
+A limit describes the value that a function approaches as the input approaches some value. We write this as:
+
+\[ \lim_{x \to a} f(x) = L \]
+
+This means that as $x$ gets closer and closer to $a$, the function $f(x)$ gets closer and closer to $L$.
+
+\subsection{Example: Simple Limit}
+
+Consider the function $f(x) = 2x + 1$. What is $\lim_{x \to 3} f(x)$?
+
+As $x$ approaches 3, we can substitute:
+\[ \lim_{x \to 3} (2x + 1) = 2(3) + 1 = 7 \]
+
+\section{Continuity}
+
+A function is continuous at a point $x = a$ if:
+\begin{enumerate}
+    \item $f(a)$ is defined
+    \item $\lim_{x \to a} f(x)$ exists
+    \item $\lim_{x \to a} f(x) = f(a)$
+\end{enumerate}
+
+\chapter{Derivatives}
+
+\section{Definition of the Derivative}
+
+The derivative of a function $f(x)$ at a point $x$ is defined as:
+
+\[ f'(x) = \lim_{h \to 0} \frac{f(x+h) - f(x)}{h} \]
+
+This represents the instantaneous rate of change of the function at that point.
+
+\subsection{Power Rule}
+
+For any function of the form $f(x) = x^n$ where $n$ is a constant:
+
+\[ \frac{d}{dx}(x^n) = nx^{n-1} \]
+
+\textbf{Example:} If $f(x) = x^3$, then $f'(x) = 3x^2$.
+
+\section{Common Derivatives}
+
+Here are some important derivative formulas:
+
+\begin{align}
+\frac{d}{dx}(c) &= 0 \quad \text{(constant rule)} \\
+\frac{d}{dx}(x) &= 1 \\
+\frac{d}{dx}(\sin x) &= \cos x \\
+\frac{d}{dx}(\cos x) &= -\sin x \\
+\frac{d}{dx}(e^x) &= e^x \\
+\frac{d}{dx}(\ln x) &= \frac{1}{x}
+\end{align}
+
+\chapter{Integration}
+
+\section{Antiderivatives}
+
+An antiderivative of a function $f(x)$ is a function $F(x)$ such that $F'(x) = f(x)$.
+
+The indefinite integral is written as:
+\[ \int f(x) \, dx = F(x) + C \]
+
+where $C$ is the constant of integration.
+
+\section{Definite Integrals}
+
+The definite integral from $a$ to $b$ is:
+
+\[ \int_a^b f(x) \, dx = F(b) - F(a) \]
+
+This represents the area under the curve $f(x)$ from $x = a$ to $x = b$.
+
+\subsection{Example: Computing Area}
+
+Find the area under $f(x) = x^2$ from $x = 0$ to $x = 1$:
+
+\begin{align}
+\int_0^1 x^2 \, dx &= \left[ \frac{x^3}{3} \right]_0^1 \\
+&= \frac{1^3}{3} - \frac{0^3}{3} \\
+&= \frac{1}{3}
+\end{align}
+
+\section{Fundamental Theorem of Calculus}
+
+The Fundamental Theorem of Calculus connects differentiation and integration:
+
+If $F(x) = \int_a^x f(t) \, dt$, then $F'(x) = f(x)$.
+
+This powerful theorem tells us that differentiation and integration are inverse operations.
+
+\end{document}

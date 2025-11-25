@@ -143,9 +143,8 @@ export const AIAssistSidebar: React.FC<AIAssistSidebarProps> = ({
       response.questions.forEach((q, index) => {
         quizText += `**Question ${index + 1}:** ${q.question}\n\n`;
         q.options.forEach((option, optIndex) => {
-          quizText += `${String.fromCharCode(97 + optIndex)}) ${option}\n`;
+          quizText += `${String.fromCharCode(97 + optIndex)}) ${option}\n\n`;
         });
-        quizText += `\n`;
       });
       
       quizText += `*Think about your answers and reply with your choices (e.g., "1a, 2b, 3c").*`;
@@ -217,12 +216,12 @@ export const AIAssistSidebar: React.FC<AIAssistSidebarProps> = ({
                     <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed animate-fade-in ${
                         msg.role === 'user' 
                         ? 'bg-brand-orange text-white rounded-tr-none shadow-lg' 
-                        : 'bg-[#3E2723] text-brand-cream border border-[#A1887F]/20 rounded-tl-none whitespace-pre-wrap'
+                        : 'bg-[#3E2723] text-brand-cream border border-[#A1887F]/20 rounded-tl-none'
                     }`}>
                         {msg.role === 'ai' ? <ReactMarkdown components={{
                            p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
                            ul: ({children}) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
-                           li: ({children}) => <li className="mb-1">{children}</li>,
+                           li: ({children}) => <li className="mb-1 [&>p]:mb-0">{children}</li>,
                            strong: ({children}) => <span className="font-bold text-brand-orange/90">{children}</span>
                         }}>{msg.text}</ReactMarkdown> : msg.text}
                     </div>

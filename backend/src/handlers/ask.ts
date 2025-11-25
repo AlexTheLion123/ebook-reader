@@ -31,13 +31,20 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         SK: `chapter#${chapterNumber}` 
       });
       
-      if (!chapter?.s3Key) {
+      if (!chapter) {
         return { statusCode: 404, body: JSON.stringify({ error: 'Chapter not found' }) };
       }
 
-      const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
-      const htmlContent = contentBuffer.toString('utf-8');
-      context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      // Use textContent if available (TeX books), otherwise fetch from S3 and strip HTML
+      if (chapter.textContent) {
+        context = chapter.textContent;
+      } else if (chapter.s3Key) {
+        const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
+        const htmlContent = contentBuffer.toString('utf-8');
+        context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      } else {
+        return { statusCode: 404, body: JSON.stringify({ error: 'Chapter content not found' }) };
+      }
     } else {
       // Question about entire book - use first chapter as context for now
       // TODO: Implement full RAG with embeddings for better cross-chapter search
@@ -46,13 +53,20 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         SK: 'chapter#1' 
       });
       
-      if (!chapter?.s3Key) {
+      if (!chapter) {
         return { statusCode: 404, body: JSON.stringify({ error: 'Book content not found' }) };
       }
 
-      const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
-      const htmlContent = contentBuffer.toString('utf-8');
-      context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      // Use textContent if available (TeX books), otherwise fetch from S3 and strip HTML
+      if (chapter.textContent) {
+        context = chapter.textContent;
+      } else if (chapter.s3Key) {
+        const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
+        const htmlContent = contentBuffer.toString('utf-8');
+        context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      } else {
+        return { statusCode: 404, body: JSON.stringify({ error: 'Book content not found' }) };
+      }
     }
 
     const answer = await answerQuestion(question, context, bookMeta?.title, quizMode);

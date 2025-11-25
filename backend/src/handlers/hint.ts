@@ -42,13 +42,21 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       SK: `chapter#${chapterNum}` 
     });
     
-    if (!chapter?.s3Key) {
+    if (!chapter) {
       return { statusCode: 404, body: JSON.stringify({ error: 'Chapter not found' }) };
     }
 
-    const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
-    const htmlContent = contentBuffer.toString('utf-8');
-    const context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();
+    // Use textContent if available (TeX books), otherwise fetch from S3
+    let context: string;
+    if (chapter.textContent) {
+      context = chapter.textContent;
+    } else if (chapter.s3Key) {
+      const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
+      const htmlContent = contentBuffer.toString('utf-8');
+      context = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    } else {
+      return { statusCode: 404, body: JSON.stringify({ error: 'Chapter content not available' }) };
+    }
 
     // Progressive hint prompts
     const hintPrompts = {

@@ -10,6 +10,18 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'bookId and fileName required' }) };
     }
 
+    // Detect file format
+    const isTexFile = /\.(tex|latex)$/i.test(fileName);
+    const isEpubFile = /\.epub$/i.test(fileName);
+    
+    if (!isTexFile && !isEpubFile) {
+      return { 
+        statusCode: 400, 
+        body: JSON.stringify({ error: 'Only .epub, .tex, and .latex files are supported' }) 
+      };
+    }
+
+    const sourceFormat = isTexFile ? 'tex' : 'epub';
     const bucket = process.env.BOOKS_BUCKET!;
     const key = `${bookId}/${fileName}`;
     const uploadUrl = await getUploadUrl(bucket, key);
@@ -20,9 +32,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       SK: 'metadata',
       type: 'book',
       fileName,
-      title: title || fileName.replace(/\.epub$/i, ''),
+      sourceFormat,
+      title: title || fileName.replace(/\.(epub|tex|latex)$/i, ''),
       author: author || 'Unknown Author',
-      description: description || 'Uploaded EPUB Textbook',
+      description: description || `Uploaded ${sourceFormat.toUpperCase()} Textbook`,
       subject: subject || '',
       s3Key: key,
       uploadedAt: Date.now(),
@@ -32,7 +45,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     return {
       statusCode: 200,
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ uploadUrl, bookId, key })
+      body: JSON.stringify({ uploadUrl, bookId, key, sourceFormat })
     };
   } catch (error) {
     console.error(error);

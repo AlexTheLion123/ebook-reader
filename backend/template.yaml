@@ -471,6 +471,31 @@ Resources:
         - SNSPublishMessagePolicy:
             TopicName: !GetAtt EpubProcessingTopic.TopicName
 
+  ProcessTexFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        External:
+          - jsdom
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/processTex.handler
+      Timeout: 300
+      MemorySize: 2048
+      Layers:
+        - !Ref LaTeXMLLayer
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref TextbookBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt EpubProcessingTopic.TopicName
+
   ProcessEpubFunctionEventInvokeConfig:
     Type: AWS::Lambda::EventInvokeConfig
     DependsOn:
@@ -478,6 +503,18 @@ Resources:
       - EpubProcessingTopic
     Properties:
       FunctionName: !Ref ProcessEpubFunction
+      Qualifier: $LATEST
+      DestinationConfig:
+        OnFailure:
+          Destination: !Ref EpubProcessingTopic
+
+  ProcessTexFunctionEventInvokeConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    DependsOn:
+      - ProcessTexFunction
+      - EpubProcessingTopic
+    Properties:
+      FunctionName: !Ref ProcessTexFunction
       Qualifier: $LATEST
       DestinationConfig:
         OnFailure:
@@ -491,14 +528,37 @@ Resources:
       Principal: s3.amazonaws.com
       SourceArn: !Sub 'arn:aws:s3:::${TextbookBucket}'
 
+  ProcessTexFunctionS3Permission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProcessTexFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub 'arn:aws:s3:::${TextbookBucket}'
+
+  # Lambda Layer for LaTeXML
+  LaTeXMLLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: latexml-layer
+      Description: LaTeXML and dependencies for TeX processing
+      ContentUri: ./layers/latexml/
+      CompatibleRuntimes:
+        - nodejs18.x
+    Metadata:
+      BuildMethod: makefile
+
   # Custom resource to configure S3 notifications
   S3NotificationCustomResource:
     Type: Custom::S3BucketNotification
-    DependsOn: ProcessEpubFunctionS3Permission
+    DependsOn: 
+      - ProcessEpubFunctionS3Permission
+      - ProcessTexFunctionS3Permission
     Properties:
       ServiceToken: !GetAtt S3NotificationFunction.Arn
       BucketName: !Ref TextbookBucket
-      LambdaArn: !GetAtt ProcessEpubFunction.Arn
+      EpubLambdaArn: !GetAtt ProcessEpubFunction.Arn
+      TexLambdaArn: !GetAtt ProcessTexFunction.Arn
 
   S3NotificationFunction:
     Type: AWS::Serverless::Function
@@ -528,28 +588,52 @@ Resources:
         def handler(event, context):
             try:
                 bucket = event['ResourceProperties']['BucketName']
-                lambda_arn = event['ResourceProperties']['LambdaArn']
                 
                 if event['RequestType'] == 'Delete':
                     s3.put_bucket_notification_configuration(
                         Bucket=bucket,
                         NotificationConfiguration={}
                     )
-                else:
-                    s3.put_bucket_notification_configuration(
-                        Bucket=bucket,
-                        NotificationConfiguration={
-                            'LambdaFunctionConfigurations': [{
-                                'LambdaFunctionArn': lambda_arn,
+                    send_response(event, context, 'SUCCESS')
+                    return
+                
+                epub_lambda_arn = event['ResourceProperties']['EpubLambdaArn']
+                tex_lambda_arn = event['ResourceProperties']['TexLambdaArn']
+                
+                s3.put_bucket_notification_configuration(
+                    Bucket=bucket,
+                    NotificationConfiguration={
+                        'LambdaFunctionConfigurations': [
+                            {
+                                'LambdaFunctionArn': epub_lambda_arn,
                                 'Events': ['s3:ObjectCreated:*'],
                                 'Filter': {
                                     'Key': {
                                         'FilterRules': [{'Name': 'suffix', 'Value': '.epub'}]
                                     }
                                 }
-                            }]
-                        }
-                    )
+                            },
+                            {
+                                'LambdaFunctionArn': tex_lambda_arn,
+                                'Events': ['s3:ObjectCreated:*'],
+                                'Filter': {
+                                    'Key': {
+                                        'FilterRules': [{'Name': 'suffix', 'Value': '.tex'}]
+                                    }
+                                }
+                            },
+                            {
+                                'LambdaFunctionArn': tex_lambda_arn,
+                                'Events': ['s3:ObjectCreated:*'],
+                                'Filter': {
+                                    'Key': {
+                                        'FilterRules': [{'Name': 'suffix', 'Value': '.latex'}]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                )
                 send_response(event, context, 'SUCCESS')
             except Exception as e:
                 print(f'Error: {e}')

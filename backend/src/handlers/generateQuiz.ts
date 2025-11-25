@@ -42,13 +42,21 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
     // Get chapter content
     const chapter = await getItem(process.env.CONTENT_TABLE!, { PK: pk, SK: chapterSK });
-    if (!chapter?.s3Key) {
+    if (!chapter) {
       return { statusCode: 404, body: JSON.stringify({ error: 'Chapter not found' }) };
     }
 
-    const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
-    const htmlContent = contentBuffer.toString('utf-8');
-    const textContent = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    // Use textContent if available (TeX books), otherwise fetch from S3
+    let textContent: string;
+    if (chapter.textContent) {
+      textContent = chapter.textContent;
+    } else if (chapter.s3Key) {
+      const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, chapter.s3Key);
+      const htmlContent = contentBuffer.toString('utf-8');
+      textContent = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    } else {
+      return { statusCode: 404, body: JSON.stringify({ error: 'Chapter content not available' }) };
+    }
 
     // Generate quiz using Bedrock
     const systemPrompt = `You are a helpful study assistant creating quiz questions. Generate questions that test understanding of key concepts.`;
