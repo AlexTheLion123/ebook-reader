@@ -12,25 +12,27 @@ export const invokeModel = async (
   systemPrompt?: string,
   options: InvokeModelOptions = {}
 ): Promise<string> => {
-  const fullPrompt = systemPrompt 
-    ? `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n${systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`
-    : `<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
-  
   const command = new InvokeModelCommand({
-    modelId: 'meta.llama3-2-3b-instruct-v1:0',
+    modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
     contentType: 'application/json',
     accept: 'application/json',
     body: JSON.stringify({
-      prompt: fullPrompt,
-      max_gen_len: options.maxTokens || 2000,
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: options.maxTokens || 2000,
       temperature: options.temperature || 0.7,
-      top_p: 0.9
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      ...(systemPrompt && { system: systemPrompt })
     })
   });
 
   const response = await client.send(command);
   const result = JSON.parse(new TextDecoder().decode(response.body));
-  return result.generation;
+  return result.content[0].text;
 };
 
 export const generateChapterSummary = async (chapterContent: string, chapterTitle: string): Promise<string> => {

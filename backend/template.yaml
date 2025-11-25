@@ -171,6 +171,11 @@ Resources:
               Action:
                 - bedrock:InvokeModel
               Resource: '*'
+            - Effect: Allow
+              Action:
+                - aws-marketplace:ViewSubscriptions
+                - aws-marketplace:Subscribe
+              Resource: '*'
       Events:
         Ask:
           Type: Api
@@ -200,6 +205,11 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - aws-marketplace:ViewSubscriptions
+                - aws-marketplace:Subscribe
               Resource: '*'
       Events:
         Summarize:
@@ -231,6 +241,11 @@ Resources:
               Action:
                 - bedrock:InvokeModel
               Resource: '*'
+            - Effect: Allow
+              Action:
+                - aws-marketplace:ViewSubscriptions
+                - aws-marketplace:Subscribe
+              Resource: '*'
       Events:
         GenerateQuiz:
           Type: Api
@@ -256,6 +271,11 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - aws-marketplace:ViewSubscriptions
+                - aws-marketplace:Subscribe
               Resource: '*'
       Events:
         EvaluateAnswer:
@@ -286,6 +306,11 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - aws-marketplace:ViewSubscriptions
+                - aws-marketplace:Subscribe
               Resource: '*'
       Events:
         Hint:

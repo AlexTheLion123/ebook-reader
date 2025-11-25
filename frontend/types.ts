@@ -81,3 +81,14 @@ export interface Book {
 export interface BookListResponse {
   books: Book[];
 }
+
+export type QuestionType = 'MCQ' | 'SHORT_ANSWER' | 'FILL_BLANK' | 'TRUE_FALSE';
+
+export interface Question {
+  id: number;
+  type: QuestionType;
+  text: string;
+  options?: string[]; // For MCQ
+  correctAnswer: string; // For validation
+  explanation: string;
+}
