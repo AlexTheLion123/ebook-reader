@@ -504,7 +504,7 @@ const App: React.FC = () => {
                 Log of all upload attempts
               </span>
             </div>
-            <BookList books={uploadedBooks} />
+            <BookList books={uploadedBooks} onToast={addToast} />
           </div>
 
         </div>

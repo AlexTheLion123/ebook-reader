@@ -1,0 +1,26 @@
+{
+  "name": "local-processor",
+  "version": "1.0.0",
+  "description": "Local book processing pipeline for QuickBook",
+  "type": "module",
+  "scripts": {
+    "book": "npx tsx process-book.ts",
+    "book:init": "npx tsx process-book.ts init",
+    "book:process": "npx tsx process-book.ts process",
+    "book:status": "npx tsx process-book.ts status",
+    "upload": "npx tsx upload-book.ts",
+    "chunk": "npx tsx chunk-latex.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.400.0",
+    "@aws-sdk/client-s3": "^3.400.0",
+    "@aws-sdk/lib-dynamodb": "^3.400.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

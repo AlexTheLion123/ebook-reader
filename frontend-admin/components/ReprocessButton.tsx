@@ -79,12 +79,11 @@ const ReprocessButton: React.FC<ReprocessButtonProps> = ({ bookId, bookTitle, on
         className={`inline-flex items-center justify-center p-2 rounded-md transition-colors ${
           status === 'reprocessing' 
             ? 'text-amber-500 bg-amber-500/10 cursor-not-allowed' 
-            : 'text-zinc-500 hover:text-amber-400 hover:bg-zinc-800 opacity-0 group-hover:opacity-100 focus:opacity-100'
+            : 'text-zinc-500 hover:text-amber-400 hover:bg-zinc-800'
         }`}
         title="Reprocess Book"
       >
         <RefreshCw size={16} className={status === 'reprocessing' ? 'animate-spin' : ''} />
-        {status === 'reprocessing' && <span className="ml-2 text-xs">Reprocessing...</span>}
       </button>
 
       <ReprocessModal

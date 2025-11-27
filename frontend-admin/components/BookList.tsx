@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Book, UploadStatus } from '../types';
 import { FileText, Check, Loader2, AlertCircle, Clock } from 'lucide-react';
+import ReprocessButton from './ReprocessButton';
 
 interface BookListProps {
   books: Book[];
+  onToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
 const ProcessingTimer: React.FC<{ startTime: string }> = ({ startTime }) => {
@@ -53,7 +55,7 @@ const StatusBadge: React.FC<{ status: UploadStatus; startTime?: string }> = ({ s
   }
 };
 
-const BookList: React.FC<BookListProps> = ({ books }) => {
+const BookList: React.FC<BookListProps> = ({ books, onToast }) => {
   if (books.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-lg bg-zinc-900/20">
@@ -68,17 +70,18 @@ const BookList: React.FC<BookListProps> = ({ books }) => {
       <table className="w-full text-left text-sm">
         <thead className="bg-zinc-900/50 text-zinc-400 font-medium border-b border-zinc-800">
           <tr>
-            <th className="px-4 py-3 w-[40%]">Book Details</th>
-            <th className="px-4 py-3 w-[20%]">ID</th>
-            <th className="px-4 py-3 w-[20%]">Date</th>
-            <th className="px-4 py-3 w-[20%] text-right">Status</th>
+            <th className="px-4 py-3 text-left w-full">Book Details</th>
+            <th className="px-4 py-3 text-left whitespace-nowrap">ID</th>
+            <th className="px-4 py-3 text-left whitespace-nowrap">Date</th>
+            <th className="px-4 py-3 text-right whitespace-nowrap">Status</th>
+            <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-800/50">
           {books.map((book) => (
-            <tr key={book.bookId} className="hover:bg-zinc-900/40 transition-colors">
+            <tr key={book.bookId} className="group hover:bg-zinc-900/40 transition-colors">
               <td className="px-4 py-3">
-                <div className="flex flex-col">
+                <div className="flex flex-col max-w-[200px] sm:max-w-[300px]">
                   <span className="text-zinc-200 font-medium truncate">{book.title}</span>
                   <span className="text-xs text-zinc-500 truncate">{book.author || 'Unknown Author'} • {book.subject || 'General'}</span>
                 </div>
@@ -91,6 +94,13 @@ const BookList: React.FC<BookListProps> = ({ books }) => {
               </td>
               <td className="px-4 py-3 text-right">
                 <StatusBadge status={book.status} startTime={book.processingStartedAt || book.uploadedAt} />
+              </td>
+              <td className="px-4 py-3 text-right">
+                <ReprocessButton 
+                  bookId={book.bookId} 
+                  bookTitle={book.title} 
+                  onToast={onToast} 
+                />
               </td>
             </tr>
           ))}

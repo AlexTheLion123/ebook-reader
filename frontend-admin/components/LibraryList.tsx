@@ -24,10 +24,10 @@ const LibraryList: React.FC<LibraryListProps> = ({ books, onHide, onToast }) => 
       <table className="w-full text-left text-sm">
         <thead className="bg-zinc-900/50 text-zinc-400 font-medium border-b border-zinc-800">
           <tr>
-            <th className="px-4 py-3 w-[40%]">Book Details</th>
-            <th className="px-4 py-3 w-[25%]">ID</th>
-            <th className="px-4 py-3 w-[25%]">Description</th>
-            <th className="px-4 py-3 w-[10%] text-right">Actions</th>
+            <th className="px-4 py-3 text-left w-full">Book Details</th>
+            <th className="px-4 py-3 text-left whitespace-nowrap">ID</th>
+            <th className="px-4 py-3 text-left">Description</th>
+            <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-800/50">
@@ -63,7 +63,7 @@ const LibraryList: React.FC<LibraryListProps> = ({ books, onHide, onToast }) => 
                     />
                     <button
                       onClick={() => onHide(book)}
-                      className="inline-flex items-center justify-center p-2 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      className="inline-flex items-center justify-center p-2 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
                       title="Hide from library"
                     >
                       <EyeOff size={16} />

@@ -14,7 +14,7 @@ Conditions:
 Globals:
   Function:
     Timeout: 30
-    Runtime: nodejs18.x
+    Runtime: nodejs20.x
     MemorySize: 512
     Environment:
       Variables:
@@ -320,6 +320,36 @@ Resources:
             Path: /hint
             Method: post
 
+  AgentFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/agent.handler
+      Timeout: 120
+      Environment:
+        Variables:
+          AGENT_ID: HGAOUG8YYO
+          AGENT_ALIAS_ID: NVVOJM5GAY
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: '*'
+      Events:
+        AgentChat:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /agent/chat
+            Method: post
+
   ListBooksFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -471,31 +501,6 @@ Resources:
         - SNSPublishMessagePolicy:
             TopicName: !GetAtt EpubProcessingTopic.TopicName
 
-  ProcessTexFunction:
-    Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Minify: true
-        Target: "es2020"
-        Sourcemap: true
-        External:
-          - jsdom
-    Properties:
-      CodeUri: ./
-      Handler: src/handlers/processTex.handler
-      Timeout: 300
-      MemorySize: 2048
-      Layers:
-        - !Ref LaTeXMLLayer
-      Policies:
-        - S3CrudPolicy:
-            BucketName: !Ref TextbookBucket
-        - DynamoDBCrudPolicy:
-            TableName: !Ref TextbookContentTable
-        - SNSPublishMessagePolicy:
-            TopicName: !GetAtt EpubProcessingTopic.TopicName
-
   ProcessEpubFunctionEventInvokeConfig:
     Type: AWS::Lambda::EventInvokeConfig
     DependsOn:
@@ -508,17 +513,25 @@ Resources:
         OnFailure:
           Destination: !Ref EpubProcessingTopic
 
-  ProcessTexFunctionEventInvokeConfig:
-    Type: AWS::Lambda::EventInvokeConfig
-    DependsOn:
-      - ProcessTexFunction
-      - EpubProcessingTopic
+  HandleProcessingFailureFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
     Properties:
-      FunctionName: !Ref ProcessTexFunction
-      Qualifier: $LATEST
-      DestinationConfig:
-        OnFailure:
-          Destination: !Ref EpubProcessingTopic
+      CodeUri: ./
+      Handler: src/handlers/handleProcessingFailure.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+      Events:
+        ProcessingFailure:
+          Type: SNS
+          Properties:
+            Topic: !Ref EpubProcessingTopic
 
   ProcessEpubFunctionS3Permission:
     Type: AWS::Lambda::Permission
@@ -528,37 +541,15 @@ Resources:
       Principal: s3.amazonaws.com
       SourceArn: !Sub 'arn:aws:s3:::${TextbookBucket}'
 
-  ProcessTexFunctionS3Permission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref ProcessTexFunction
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceArn: !Sub 'arn:aws:s3:::${TextbookBucket}'
-
-  # Lambda Layer for LaTeXML
-  LaTeXMLLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: latexml-layer
-      Description: LaTeXML and dependencies for TeX processing
-      ContentUri: ./layers/latexml/
-      CompatibleRuntimes:
-        - nodejs18.x
-    Metadata:
-      BuildMethod: makefile
-
   # Custom resource to configure S3 notifications
   S3NotificationCustomResource:
     Type: Custom::S3BucketNotification
     DependsOn: 
       - ProcessEpubFunctionS3Permission
-      - ProcessTexFunctionS3Permission
     Properties:
       ServiceToken: !GetAtt S3NotificationFunction.Arn
       BucketName: !Ref TextbookBucket
       EpubLambdaArn: !GetAtt ProcessEpubFunction.Arn
-      TexLambdaArn: !GetAtt ProcessTexFunction.Arn
 
   S3NotificationFunction:
     Type: AWS::Serverless::Function
@@ -598,7 +589,6 @@ Resources:
                     return
                 
                 epub_lambda_arn = event['ResourceProperties']['EpubLambdaArn']
-                tex_lambda_arn = event['ResourceProperties']['TexLambdaArn']
                 
                 s3.put_bucket_notification_configuration(
                     Bucket=bucket,
@@ -610,24 +600,6 @@ Resources:
                                 'Filter': {
                                     'Key': {
                                         'FilterRules': [{'Name': 'suffix', 'Value': '.epub'}]
-                                    }
-                                }
-                            },
-                            {
-                                'LambdaFunctionArn': tex_lambda_arn,
-                                'Events': ['s3:ObjectCreated:*'],
-                                'Filter': {
-                                    'Key': {
-                                        'FilterRules': [{'Name': 'suffix', 'Value': '.tex'}]
-                                    }
-                                }
-                            },
-                            {
-                                'LambdaFunctionArn': tex_lambda_arn,
-                                'Events': ['s3:ObjectCreated:*'],
-                                'Filter': {
-                                    'Key': {
-                                        'FilterRules': [{'Name': 'suffix', 'Value': '.latex'}]
                                     }
                                 }
                             }
@@ -648,6 +620,365 @@ Resources:
                 - s3:GetBucketNotification
               Resource: !Sub 'arn:aws:s3:::${TextbookBucket}'
 
+  # ===== BEDROCK AGENT + KNOWLEDGE BASE =====
+  # Create these manually in AWS Console (eu-west-1):
+  # 1. OpenSearch Serverless Collection: quickbook-vectors
+  # 2. Knowledge Base: quickbook-textbooks (with S3 data source pointing to knowledge-base/ prefix)
+  # 3. Bedrock Agent: quickbook-tutor (with action group pointing to ActionGroupFunction)
+  # Then update AGENT_ID and AGENT_ALIAS_ID in AgentFunction environment variables above
+  
+  # VectorEncryptionPolicy:
+#     Type: AWS::OpenSearchServerless::SecurityPolicy
+#     Properties:
+#       Name: quickbook-vector-encryption
+#       Type: encryption
+#       Policy: !Sub |
+#         {
+#           "Rules": [
+#             {
+#               "ResourceType": "collection",
+#               "Resource": ["collection/quickbook-vectors"]
+#             }
+#           ],
+#           "AWSOwnedKey": true
+#         }
+# 
+#   VectorNetworkPolicy:
+#     Type: AWS::OpenSearchServerless::SecurityPolicy
+#     Properties:
+#       Name: quickbook-vector-network
+#       Type: network
+#       Policy: !Sub |
+#         [
+#           {
+#             "Rules": [
+#               {
+#                 "ResourceType": "collection",
+#                 "Resource": ["collection/quickbook-vectors"]
+#               },
+#               {
+#                 "ResourceType": "dashboard",
+#                 "Resource": ["collection/quickbook-vectors"]
+#               }
+#             ],
+#             "AllowFromPublic": true
+#           }
+#         ]
+# 
+#   # OpenSearch Serverless Collection for vector storage
+#   VectorCollection:
+#     Type: AWS::OpenSearchServerless::Collection
+#     DependsOn:
+#       - VectorEncryptionPolicy
+#       - VectorNetworkPolicy
+#     Properties:
+#       Name: quickbook-vectors
+#       Type: VECTORSEARCH
+#       Description: Vector embeddings for textbook content
+# 
+#   # IAM Role for Knowledge Base
+#   KnowledgeBaseRole:
+#     Type: AWS::IAM::Role
+#     Properties:
+#       AssumeRolePolicyDocument:
+#         Version: '2012-10-17'
+#         Statement:
+#           - Effect: Allow
+#             Principal:
+#               Service: bedrock.amazonaws.com
+#             Action: sts:AssumeRole
+#       ManagedPolicyArns:
+#         - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+#       Policies:
+#         - PolicyName: S3Access
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               - Effect: Allow
+#                 Action:
+#                   - s3:GetObject
+#                   - s3:ListBucket
+#                 Resource:
+#                   - !GetAtt TextbookBucket.Arn
+#                   - !Sub '${TextbookBucket.Arn}/*'
+#         - PolicyName: OpenSearchAccess
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               - Effect: Allow
+#                 Action:
+#                   - aoss:APIAccessAll
+#                 Resource: !GetAtt VectorCollection.Arn
+# 
+#   VectorAccessPolicy:
+#     Type: AWS::OpenSearchServerless::AccessPolicy
+#     Properties:
+#       Name: quickbook-vector-access
+#       Type: data
+#       Policy: !Sub |
+#         [
+#           {
+#             "Rules": [
+#               {
+#                 "ResourceType": "collection",
+#                 "Resource": ["collection/quickbook-vectors"],
+#                 "Permission": [
+#                   "aoss:CreateCollectionItems",
+#                   "aoss:DeleteCollectionItems",
+#                   "aoss:UpdateCollectionItems",
+#                   "aoss:DescribeCollectionItems"
+#                 ]
+#               },
+#               {
+#                 "ResourceType": "index",
+#                 "Resource": ["index/quickbook-vectors/*"],
+#                 "Permission": [
+#                   "aoss:CreateIndex",
+#                   "aoss:DeleteIndex",
+#                   "aoss:UpdateIndex",
+#                   "aoss:DescribeIndex",
+#                   "aoss:ReadDocument",
+#                   "aoss:WriteDocument"
+#                 ]
+#               }
+#             ],
+#             "Principal": [
+#               "${KnowledgeBaseRole.Arn}"
+#             ]
+#           }
+#         ]
+# 
+#   # Bedrock Knowledge Base
+#   TextbookKnowledgeBase:
+#     Type: AWS::Bedrock::KnowledgeBase
+#     DependsOn:
+#       - VectorCollection
+#       - VectorAccessPolicy
+#     Properties:
+#       Name: quickbook-textbooks
+#       RoleArn: !GetAtt KnowledgeBaseRole.Arn
+#       KnowledgeBaseConfiguration:
+#         Type: VECTOR
+#         VectorKnowledgeBaseConfiguration:
+#           EmbeddingModelArn: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1'
+#       StorageConfiguration:
+#         Type: OPENSEARCH_SERVERLESS
+#         OpensearchServerlessConfiguration:
+#           CollectionArn: !GetAtt VectorCollection.Arn
+#           VectorIndexName: textbook-index
+#           FieldMapping:
+#             VectorField: embedding
+#             TextField: content
+#             MetadataField: metadata
+# 
+#   # S3 Data Source for Knowledge Base
+#   KnowledgeBaseDataSource:
+#     Type: AWS::Bedrock::DataSource
+#     Properties:
+#       KnowledgeBaseId: !Ref TextbookKnowledgeBase
+#       Name: textbook-chunks
+#       DataSourceConfiguration:
+#         Type: S3
+#         S3Configuration:
+#           BucketArn: !GetAtt TextbookBucket.Arn
+#           BucketOwnerAccountId: !Ref AWS::AccountId
+#           InclusionPrefixes:
+#             - knowledge-base/
+#       VectorIngestionConfiguration:
+#         ChunkingConfiguration:
+#           ChunkingStrategy: NONE
+# 
+#   # IAM Role for Bedrock Agent
+#   AgentRole:
+#     Type: AWS::IAM::Role
+#     Properties:
+#       AssumeRolePolicyDocument:
+#         Version: '2012-10-17'
+#         Statement:
+#           - Effect: Allow
+#             Principal:
+#               Service: bedrock.amazonaws.com
+#             Action: sts:AssumeRole
+#       ManagedPolicyArns:
+#         - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+#       Policies:
+#         - PolicyName: KnowledgeBaseAccess
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               - Effect: Allow
+#                 Action:
+#                   - bedrock:Retrieve
+#                   - bedrock:RetrieveAndGenerate
+#                 Resource: !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${TextbookKnowledgeBase}'
+#         - PolicyName: ActionGroupLambdaInvoke
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               - Effect: Allow
+#                 Action:
+#                   - lambda:InvokeFunction
+#                 Resource: !GetAtt ActionGroupFunction.Arn
+# 
+#   # Action Group Lambda Function
+#   ActionGroupFunction:
+#     Type: AWS::Serverless::Function
+#     Metadata:
+#       BuildMethod: esbuild
+#       BuildProperties:
+#         Minify: true
+#         Target: "es2020"
+#         Sourcemap: true
+#     Properties:
+#       CodeUri: ./
+#       Handler: src/handlers/actionGroup.handler
+#       Timeout: 60
+#       Environment:
+#         Variables:
+#           CONTENT_TABLE: !Ref TextbookContentTable
+#           PROGRESS_TABLE: !Ref UserProgressTable
+#           BOOKS_BUCKET: !Ref TextbookBucket
+#       Policies:
+#         - DynamoDBCrudPolicy:
+#             TableName: !Ref TextbookContentTable
+#         - DynamoDBCrudPolicy:
+#             TableName: !Ref UserProgressTable
+#         - S3ReadPolicy:
+#             BucketName: !Ref TextbookBucket
+#         - Statement:
+#             - Effect: Allow
+#               Action:
+#                 - bedrock:InvokeModel
+#               Resource: '*'
+# 
+#   # Permission for Bedrock to invoke Action Group Lambda
+#   ActionGroupFunctionPermission:
+#     Type: AWS::Lambda::Permission
+#     Properties:
+#       FunctionName: !Ref ActionGroupFunction
+#       Action: lambda:InvokeFunction
+#       Principal: bedrock.amazonaws.com
+#       SourceArn: !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/${TutorAgent.AgentId}'
+# 
+#   # Bedrock Agent
+#   TutorAgent:
+#     Type: AWS::Bedrock::Agent
+#     DependsOn: ActionGroupFunction
+#     Properties:
+#       AgentName: quickbook-tutor
+#       AgentResourceRoleArn: !GetAtt AgentRole.Arn
+#       FoundationModel: anthropic.claude-3-haiku-20240307-v1:0
+#       Instruction: |
+#         You are an expert AI tutor helping students learn from textbooks.
+#         
+#         Your role:
+#         - Answer questions clearly with examples from the textbook
+#         - Use the Socratic method to guide learning
+#         - Generate practice problems when appropriate using the generateQuiz tool
+#         - Provide progressive hints using the getHint tool (never give direct answers immediately)
+#         - Evaluate student answers using the evaluateAnswer tool
+#         - Track student progress to personalize the learning experience
+#         - Be patient, encouraging, and focus on understanding over memorization
+#         
+#         When a student asks a question:
+#         1. Search the knowledge base for relevant content
+#         2. Provide a clear explanation with context from the textbook
+#         3. Offer to generate practice problems or provide examples
+#         4. Ask follow-up questions to check understanding
+#         
+#         When to use tools:
+#         - Use generateQuiz when the student wants to practice or after explaining a concept
+#         - Use getHint when a student is stuck on a problem (start with level 1, increase if they need more help)
+#         - Use evaluateAnswer when a student submits an answer to check their understanding
+#         - Use trackProgress to record completed activities and scores
+#         - Use getLearningSummary to review a student's progress and tailor recommendations
+#         
+#         Always cite specific sections or theorems when referencing the textbook.
+#       KnowledgeBases:
+#         - KnowledgeBaseId: !Ref TextbookKnowledgeBase
+#           Description: Textbook content with LaTeX equations and examples
+#           KnowledgeBaseState: ENABLED
+#       ActionGroups:
+#         - ActionGroupName: tutoring-tools
+#           Description: Tools for interactive tutoring including quiz generation, hints, and progress tracking
+#           ActionGroupExecutor:
+#             Lambda: !GetAtt ActionGroupFunction.Arn
+#           FunctionSchema:
+#             Functions:
+#               - Name: generateQuiz
+#                 Description: Generate practice quiz questions based on the textbook chapter content. Use this when a student wants to test their understanding or after explaining a concept.
+#                 Parameters:
+#                   chapterNumber:
+#                     Description: The chapter number to generate questions from
+#                     Required: true
+#                     Type: integer
+#                   topic:
+#                     Description: Specific topic within the chapter to focus on (optional)
+#                     Required: false
+#                     Type: string
+#                   difficulty:
+#                     Description: Difficulty level - easy, medium, or hard
+#                     Required: false
+#                     Type: string
+#                   questionCount:
+#                     Description: Number of questions to generate (default 5)
+#                     Required: false
+#                     Type: integer
+#               - Name: getHint
+#                 Description: Get a progressive hint for a question. Start with level 1 (subtle nudge) and increase to level 2 (moderate guidance) or level 3 (detailed explanation) if the student needs more help.
+#                 Parameters:
+#                   chapterNumber:
+#                     Description: The chapter number for context
+#                     Required: true
+#                     Type: integer
+#                   question:
+#                     Description: The question the student needs help with
+#                     Required: true
+#                     Type: string
+#                   hintLevel:
+#                     Description: Hint level from 1 (subtle) to 3 (detailed). Always start with 1 and increase if needed.
+#                     Required: true
+#                     Type: integer
+#               - Name: evaluateAnswer
+#                 Description: Evaluate a student's answer to a question and provide feedback
+#                 Parameters:
+#                   question:
+#                     Description: The question that was asked
+#                     Required: true
+#                     Type: string
+#                   studentAnswer:
+#                     Description: The student's answer to evaluate
+#                     Required: true
+#                     Type: string
+#                   correctAnswer:
+#                     Description: The expected correct answer (if known)
+#                     Required: false
+#                     Type: string
+#               - Name: trackProgress
+#                 Description: Track student activity and progress for personalized learning
+#                 Parameters:
+#                   chapterNumber:
+#                     Description: The chapter number being studied
+#                     Required: true
+#                     Type: integer
+#                   activity:
+#                     Description: Type of activity (e.g., 'study', 'quiz', 'practice')
+#                     Required: true
+#                     Type: string
+#                   score:
+#                     Description: Score achieved (0.0 to 1.0) if applicable
+#                     Required: false
+#                     Type: number
+#               - Name: getLearningSummary
+#                 Description: Get a summary of the student's learning progress for the book
+#                 Parameters: {}
+# 
+#   AgentAlias:
+#     Type: AWS::Bedrock::AgentAlias
+#     Properties:
+#       AgentId: !GetAtt TutorAgent.AgentId
+#       AgentAliasName: production
+# 
 Outputs:
   ApiEndpoint:
     Description: API Gateway endpoint URL

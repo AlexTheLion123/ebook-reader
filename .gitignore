@@ -1,3 +1,4 @@
 sandbox
 *.md
 cozy-library
+**/node_modules
