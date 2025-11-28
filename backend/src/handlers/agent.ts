@@ -60,6 +60,14 @@ interface AgentResponse {
   }>;
 }
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
     const { sessionId, message, bookId, enableTrace } = JSON.parse(event.body || '{}');
@@ -92,7 +100,33 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       } : undefined
     });
 
-    const response = await client.send(command);
+    // Retry loop for rate limiting
+    let lastError: Error | null = null;
+    let response;
+    
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        response = await client.send(command);
+        break; // Success, exit retry loop
+      } catch (error) {
+        lastError = error as Error;
+        const errorMessage = lastError.message || '';
+        
+        // Only retry on rate limiting errors
+        if (errorMessage.includes('rate') || errorMessage.includes('throttl') || errorMessage.includes('ThrottlingException')) {
+          console.log(`Rate limited, attempt ${attempt}/${MAX_RETRIES}. Retrying in ${RETRY_DELAY_MS * attempt}ms...`);
+          if (attempt < MAX_RETRIES) {
+            await sleep(RETRY_DELAY_MS * attempt); // Exponential backoff
+            continue;
+          }
+        }
+        throw error; // Non-retryable error
+      }
+    }
+    
+    if (!response) {
+      throw lastError || new Error('Failed to invoke agent after retries');
+    }
 
     // Collect response chunks and trace information
     const chunks: string[] = [];

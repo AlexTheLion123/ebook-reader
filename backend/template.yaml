@@ -819,48 +819,48 @@ Resources:
 #                 Action:
 #                   - lambda:InvokeFunction
 #                 Resource: !GetAtt ActionGroupFunction.Arn
-# 
-#   # Action Group Lambda Function
-#   ActionGroupFunction:
-#     Type: AWS::Serverless::Function
-#     Metadata:
-#       BuildMethod: esbuild
-#       BuildProperties:
-#         Minify: true
-#         Target: "es2020"
-#         Sourcemap: true
-#     Properties:
-#       CodeUri: ./
-#       Handler: src/handlers/actionGroup.handler
-#       Timeout: 60
-#       Environment:
-#         Variables:
-#           CONTENT_TABLE: !Ref TextbookContentTable
-#           PROGRESS_TABLE: !Ref UserProgressTable
-#           BOOKS_BUCKET: !Ref TextbookBucket
-#       Policies:
-#         - DynamoDBCrudPolicy:
-#             TableName: !Ref TextbookContentTable
-#         - DynamoDBCrudPolicy:
-#             TableName: !Ref UserProgressTable
-#         - S3ReadPolicy:
-#             BucketName: !Ref TextbookBucket
-#         - Statement:
-#             - Effect: Allow
-#               Action:
-#                 - bedrock:InvokeModel
-#               Resource: '*'
-# 
-#   # Permission for Bedrock to invoke Action Group Lambda
-#   ActionGroupFunctionPermission:
-#     Type: AWS::Lambda::Permission
-#     Properties:
-#       FunctionName: !Ref ActionGroupFunction
-#       Action: lambda:InvokeFunction
-#       Principal: bedrock.amazonaws.com
-#       SourceArn: !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/${TutorAgent.AgentId}'
-# 
-#   # Bedrock Agent
+
+  # Action Group Lambda Function
+  ActionGroupFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/actionGroup.handler
+      Timeout: 60
+      Environment:
+        Variables:
+          CONTENT_TABLE: !Ref TextbookContentTable
+          PROGRESS_TABLE: !Ref UserProgressTable
+          BOOKS_BUCKET: !Ref TextbookBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserProgressTable
+        - S3ReadPolicy:
+            BucketName: !Ref TextbookBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+
+  # Permission for Bedrock to invoke Action Group Lambda (uses hardcoded agent ID)
+  ActionGroupFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ActionGroupFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceArn: !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/HGAOUG8YYO'
+
+#   # Bedrock Agent (created manually in console)
 #   TutorAgent:
 #     Type: AWS::Bedrock::Agent
 #     DependsOn: ActionGroupFunction

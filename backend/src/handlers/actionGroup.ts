@@ -219,6 +219,65 @@ async function trackProgress(userId: string, bookId: string, chapterNumber: numb
 }
 
 /**
+ * Get pre-generated chapter summary from DynamoDB
+ * This avoids KB semantic search issues with chapter numbers
+ */
+async function getChapterSummary(bookId: string, chapterNumber: number): Promise<string> {
+  // Look up pre-generated summary by exact chapter number
+  const result = await docClient.send(new GetCommand({
+    TableName: CONTENT_TABLE,
+    Key: { 
+      PK: `book#${bookId}`, 
+      SK: `summary#${chapterNumber}` 
+    }
+  }));
+
+  if (result.Item?.summary) {
+    return JSON.stringify({
+      chapterNumber,
+      summary: result.Item.summary,
+      cached: true
+    });
+  }
+
+  // If no pre-generated summary, generate one on the fly
+  try {
+    const content = await getChapterContent(bookId, chapterNumber);
+    
+    const prompt = `Summarize this chapter content in 2-3 paragraphs. Include key events, character interactions, and important developments.
+
+Chapter content:
+${content.slice(0, 30000)}`;
+
+    const summary = await invokeModel(prompt, 'You are a helpful literary assistant summarizing book chapters.', { maxTokens: 800 });
+    
+    // Cache for future requests
+    await docClient.send(new PutCommand({
+      TableName: CONTENT_TABLE,
+      Item: {
+        PK: `book#${bookId}`,
+        SK: `summary#${chapterNumber}`,
+        type: 'summary',
+        chapterNumber,
+        summary,
+        generatedAt: Date.now()
+      }
+    }));
+
+    return JSON.stringify({
+      chapterNumber,
+      summary,
+      cached: false
+    });
+  } catch (error) {
+    return JSON.stringify({
+      error: `Could not generate summary for chapter ${chapterNumber}`,
+      details: String(error)
+    });
+  }
+}
+
+/**
  * Get student's learning summary
  */
 async function getLearningSummary(userId: string, bookId: string): Promise<string> {
@@ -300,6 +359,12 @@ export const handler = async (event: ActionGroupEvent): Promise<ActionGroupRespo
       
       case 'getLearningSummary': {
         responseBody = await getLearningSummary(userId, bookId);
+        break;
+      }
+      
+      case 'getChapterSummary': {
+        const chapterNumber = parseInt(getParam(event, 'chapterNumber') || '1');
+        responseBody = await getChapterSummary(bookId, chapterNumber);
         break;
       }
       

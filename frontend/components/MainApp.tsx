@@ -47,13 +47,18 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
         // Use filename as title if title is missing, removing the .epub extension
         const displayTitle = b.title || (b.fileName ? b.fileName.replace(/\.epub$/i, '') : 'Untitled Book');
 
+        // Extract chapter titles from chapter objects (API returns objects with title, order, etc.)
+        const chapterTitles = (b.chapters || []).map((ch: any) => 
+          typeof ch === 'string' ? ch : (ch.title || `Chapter ${ch.order || '?'}`)
+        );
+
         return {
           title: displayTitle,
           author: b.author || 'Unknown Author',
           description: b.description || 'Uploaded EPUB Textbook',
           rating: 5.0,
           id: id,
-          chapters: b.chapters || []
+          chapters: chapterTitles
         } as any;
       });
 

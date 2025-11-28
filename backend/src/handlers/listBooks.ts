@@ -19,10 +19,10 @@ export const handler: APIGatewayProxyHandler = async () => {
             'chapter#'
           );
           
-          // Sort by order and extract titles
+          // Sort by order, filter out preamble chapters for display
           const sortedChapters = chapters
-            .sort((a, b) => (a.order || 0) - (b.order || 0))
-            .map(ch => ch.title || `Chapter ${ch.order}`);
+            .filter(ch => ch.type !== 'preamble')
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
           
           return {
             ...book,

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Type, Minus, Plus, Lightbulb, SkipBack, SkipForward, Sparkles, X, AlertTriangle, List, BookOpen, Settings } from 'lucide-react';
 import { BookDetails } from '../types';
 import { getBookContent } from '../services/backendService';
-import { AIAssistSidebar } from './AIAssistSidebar';
+import { AgentChatSidebar } from './AgentChatSidebar';
 
 interface ReaderViewProps {
   book: BookDetails;
@@ -104,10 +104,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
         .chapter-content {
           font-style: normal;
         }
-        .chapter-content h1:first-child,
-        .chapter-content h2:first-child,
-        .chapter-content h3:first-child,
-        .chapter-content h4:first-child {
+        .chapter-content h1:first-of-type,
+        .chapter-content h2:first-of-type,
+        .chapter-content h3:first-of-type,
+        .chapter-content h4:first-of-type {
           display: none;
         }
         .chapter-content p {
@@ -390,7 +390,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
       </div>
 
       {/* AI Assist Sidebar (Right) */}
-      <AIAssistSidebar 
+      <AgentChatSidebar 
         isOpen={isAiAssistOpen}
         onClose={() => setIsAiAssistOpen(false)}
         book={book}

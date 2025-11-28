@@ -265,8 +265,8 @@ export const AgentChatSidebar: React.FC<AgentChatSidebarProps> = ({
             <Bot className="w-5 h-5 text-brand-orange" />
           </div>
           <div>
-            <h3 className="text-white font-bold text-base md:text-lg">AI Tutor</h3>
-            <p className="text-[10px] md:text-xs text-brand-cream/50">Chapter {currentChapterIndex + 1}</p>
+            <h3 className="text-white font-bold text-base md:text-lg">AI Companion</h3>
+            <p className="text-[10px] md:text-xs text-brand-cream/50">Always here to help</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -284,32 +284,27 @@ export const AgentChatSidebar: React.FC<AgentChatSidebarProps> = ({
       </div>
 
       {/* Quick Actions */}
-      <div className="p-3 border-b border-[#A1887F]/20 bg-[#2a1d18]/30 grid grid-cols-3 gap-2">
+      <div className="p-4 border-b border-[#A1887F]/20 bg-[#2a1d18]/30 grid grid-cols-2 gap-3">
         <button
           onClick={handleSummarize}
           disabled={isLoading}
-          className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-1 group disabled:opacity-50"
+          className="flex flex-row md:flex-col items-center justify-center p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-2 group disabled:opacity-50"
         >
-          <FileText className="w-4 h-4 text-brand-orange group-hover:scale-110 transition-transform" />
-          <span className="text-[10px] font-bold text-brand-cream/80 group-hover:text-white">Summary</span>
+          <div className="p-2 rounded-full bg-brand-orange/10 text-brand-orange group-hover:bg-brand-orange group-hover:text-white transition-colors">
+            <FileText className="w-5 h-5" />
+          </div>
+          <span className="text-xs font-bold text-brand-cream/80 group-hover:text-white">Summarize</span>
         </button>
 
         <button
           onClick={handleQuiz}
           disabled={isLoading}
-          className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-1 group disabled:opacity-50"
+          className="flex flex-row md:flex-col items-center justify-center p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-2 group disabled:opacity-50"
         >
-          <HelpCircle className="w-4 h-4 text-brand-orange group-hover:scale-110 transition-transform" />
-          <span className="text-[10px] font-bold text-brand-cream/80 group-hover:text-white">Quiz</span>
-        </button>
-
-        <button
-          onClick={handlePractice}
-          disabled={isLoading}
-          className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-orange/30 transition-all text-center gap-1 group disabled:opacity-50"
-        >
-          <Lightbulb className="w-4 h-4 text-brand-orange group-hover:scale-110 transition-transform" />
-          <span className="text-[10px] font-bold text-brand-cream/80 group-hover:text-white">Practice</span>
+          <div className="p-2 rounded-full bg-brand-orange/10 text-brand-orange group-hover:bg-brand-orange group-hover:text-white transition-colors">
+            <HelpCircle className="w-5 h-5" />
+          </div>
+          <span className="text-xs font-bold text-brand-cream/80 group-hover:text-white">Take Quiz</span>
         </button>
       </div>
 
