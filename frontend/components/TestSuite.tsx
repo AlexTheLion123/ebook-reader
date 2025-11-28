@@ -68,7 +68,8 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   
   // Config State
   const [scope, setScope] = useState<'FULL' | 'CHAPTER'>('FULL');
-  const [difficulty, setDifficulty] = useState<'BASIC' | 'MEDIUM' | 'DEEP'>('MEDIUM');
+  const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
+  const [difficulty, setDifficulty] = useState<'BASIC' | 'MEDIUM' | 'DEEP' | 'MASTERY'>('MEDIUM');
   const [length, setLength] = useState<5 | 15 | 30>(5);
 
   // Quiz State
@@ -145,8 +146,8 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
   // Scroll config area if needed
   const renderConfig = () => (
-    <div className="w-full max-w-2xl bg-[#3E2723] rounded-2xl shadow-2xl border border-[#A1887F]/30 overflow-hidden relative z-10 animate-slide-up my-auto">
-       <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#2a1d18]/50">
+    <div className="w-full max-w-2xl max-h-[90vh] bg-[#3E2723] rounded-2xl shadow-2xl border border-[#A1887F]/30 overflow-hidden relative z-10 animate-slide-up my-auto flex flex-col">
+       <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#2a1d18]/50 shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-brand-orange/20 p-2 rounded-lg">
               <BrainCircuit className="w-6 h-6 text-brand-orange" />
@@ -164,7 +165,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
           </button>
        </div>
        
-       <div className="p-8 space-y-5">
+       <div className="p-8 space-y-5 overflow-y-auto custom-scrollbar">
         <div className="text-center space-y-1 mb-2">
             <h2 className="text-2xl font-bold text-white">Configure Assessment</h2>
             <p className="text-brand-cream/60">Customize the evaluation to match your learning goals.</p>
@@ -193,13 +194,41 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
             </div>
         </div>
 
+        {/* Chapter Selection */}
+        {scope === 'CHAPTER' && (
+          <div className="mt-4 bg-black/20 rounded-xl border border-white/5 overflow-hidden animate-fade-in">
+            <div className="p-3 bg-white/5 text-xs font-bold text-brand-cream/60 uppercase tracking-wider">
+              Select Chapter
+            </div>
+            <div className="max-h-40 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+              {book.chapters.map((chap, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedChapter(chap)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between group ${
+                    selectedChapter === chap 
+                      ? 'bg-brand-orange text-white shadow-md' 
+                      : 'text-brand-cream/70 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 truncate">
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${selectedChapter === chap ? 'bg-white/20' : 'bg-white/5'}`}>{idx + 1}</span>
+                    <span className="truncate">{chap}</span>
+                  </div>
+                  {selectedChapter === chap && <CheckCircle className="w-4 h-4 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Difficulty */}
         <div className="space-y-2">
             <label className="text-xs font-bold text-brand-orange uppercase tracking-wider flex items-center gap-2">
             <BrainCircuit className="w-4 h-4" /> Difficulty
             </label>
-            <div className="grid grid-cols-3 gap-3">
-            {(['BASIC', 'MEDIUM', 'DEEP'] as const).map((level) => (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {(['BASIC', 'MEDIUM', 'DEEP', 'MASTERY'] as const).map((level) => (
                 <button 
                 key={level}
                 onClick={() => setDifficulty(level)}
@@ -231,7 +260,12 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
         <button 
             onClick={handleStart}
-            className="w-full bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+            disabled={scope === 'CHAPTER' && !selectedChapter}
+            className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
+              scope === 'CHAPTER' && !selectedChapter
+                ? 'bg-white/10 text-white/30 cursor-not-allowed'
+                : 'bg-brand-orange hover:bg-brand-darkOrange text-white shadow-brand-orange/20 hover:scale-[1.02]'
+            }`}
         >
             <GraduationCap className="w-5 h-5" />
             Start Assessment
