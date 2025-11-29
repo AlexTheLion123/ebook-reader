@@ -68,9 +68,59 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Quiz mode context for the agent
+ * The full question JSON is passed so the agent can grade, give hints, etc.
+ */
+interface QuizModeContext {
+  mode: 'quiz' | 'study';
+  currentQuestion?: {
+    id: string;
+    text: string;
+    type: string;
+    options?: string[];
+    correctAnswer: string;
+    acceptableAnswers?: string[];
+    hints?: Array<{ level: string; text: string }>;
+    explanation: string;
+    rubric?: string;
+    chapterNumber: number;
+    tags?: {
+      difficulty?: string;
+      themes?: string[];
+      elements?: string[];
+    };
+  };
+  hintsUsed?: number; // Track how many hints have been revealed
+}
+
+/**
+ * Build the mode block to inject into the agent message
+ * In quiz mode, we pass the FULL question JSON so the agent can grade and give hints
+ */
+function buildModeBlock(quizContext?: QuizModeContext): string {
+  if (!quizContext || quizContext.mode === 'study') {
+    return `<<CONVERSATION MODE>>
+Mode: study`;
+  }
+
+  // Quiz mode - pass the full question JSON
+  if (quizContext.currentQuestion) {
+    return `<<CONVERSATION MODE>>
+Mode: quiz
+Current question: ${JSON.stringify(quizContext.currentQuestion, null, 2)}
+Hints used so far: ${quizContext.hintsUsed || 0}`;
+  }
+
+  // Quiz mode but no question loaded yet
+  return `<<CONVERSATION MODE>>
+Mode: quiz
+No active question loaded.`;
+}
+
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
-    const { sessionId, message, bookId, enableTrace } = JSON.parse(event.body || '{}');
+    const { sessionId, message, bookId, enableTrace, quizContext } = JSON.parse(event.body || '{}');
 
     if (!message) {
       return {
@@ -80,22 +130,28 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       };
     }
 
+    // Build the mode-aware message
+    const modeBlock = buildModeBlock(quizContext as QuizModeContext | undefined);
+    const enhancedMessage = `${modeBlock}\n\n---\nUser message: ${message}`;
+
     const agentId = process.env.AGENT_ID!;
     const agentAliasId = process.env.AGENT_ALIAS_ID!;
     const finalSessionId = sessionId || `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     console.log(`Invoking agent ${agentId} with session ${finalSessionId}`);
+    console.log(`Mode: ${(quizContext as QuizModeContext)?.mode || 'study'}`);
     console.log(`Message: ${message.substring(0, 100)}...`);
 
     const command = new InvokeAgentCommand({
       agentId,
       agentAliasId,
       sessionId: finalSessionId,
-      inputText: message,
+      inputText: enhancedMessage,
       enableTrace: enableTrace ?? true,
       sessionState: bookId ? {
         sessionAttributes: {
-          bookId
+          bookId,
+          conversationMode: (quizContext as QuizModeContext)?.mode || 'study'
         }
       } : undefined
     });

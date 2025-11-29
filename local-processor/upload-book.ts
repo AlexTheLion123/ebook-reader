@@ -394,6 +394,17 @@ async function main(): Promise<void> {
     console.log('\n🔍 DRY RUN MODE - No actual uploads will occur\n');
   }
   
+  // Check if this is a questions upload
+  const questionsArgs = parseQuestionsArgs();
+  if (questionsArgs) {
+    console.log('\nVerifying AWS access...');
+    await verifyAwsAccess();
+    
+    const questionsDir = path.resolve(questionsArgs.questionsDir);
+    await uploadQuestions(questionsArgs.bookId, questionsDir);
+    return;
+  }
+  
   const { inputPath, title, author } = parseArgs();
   const fullPath = path.resolve(inputPath);
   
@@ -456,6 +467,164 @@ async function main(): Promise<void> {
   
   console.log('\n📚 Upload complete! The book is now available in QuickBook.');
   console.log('You can view it at: https://d36lrbq2dbbmzz.cloudfront.net/');
+}
+
+/**
+ * Question structure for pre-generated assessment questions
+ */
+interface QuestionHint {
+  level: 'small' | 'medium';
+  text: string;
+}
+
+interface QuestionTags {
+  difficulty: 'basic' | 'medium' | 'deep' | 'mastery';
+  themes: string[];
+  elements: string[];
+}
+
+interface AssessmentQuestion {
+  id: string;
+  bookId?: string;
+  chapterNumber?: number;
+  type: 'MCQ' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'FILL_BLANK' | 'BRIEF_RESPONSE';
+  text: string;
+  options?: string[];
+  correctAnswer: string;
+  acceptableAnswers?: string[];
+  rubric?: string;
+  hints: QuestionHint[];
+  explanation: string;
+  tags: QuestionTags;
+  createdAt?: string;
+  version?: number;
+}
+
+/**
+ * Upload pre-generated questions for a book
+ * 
+ * Usage:
+ *   npx tsx upload-book.ts --upload-questions <book-id> <questions-folder>
+ * 
+ * Example:
+ *   npx tsx upload-book.ts --upload-questions 2f5738f7-f856-4026-ac71-8457e01a06dc ./books/pride-and-prejudice/questions
+ */
+async function uploadQuestions(bookId: string, questionsDir: string): Promise<void> {
+  console.log(`\nUploading questions for book: ${bookId}`);
+  console.log(`  Questions directory: ${questionsDir}`);
+  
+  if (!fs.existsSync(questionsDir)) {
+    throw new Error(`Questions directory not found: ${questionsDir}`);
+  }
+  
+  // Find all chapter question files
+  const files = fs.readdirSync(questionsDir);
+  const questionFiles = files.filter(f => f.match(/^chapter-\d+\.json$/)).sort();
+  
+  if (questionFiles.length === 0) {
+    throw new Error(`No question files found in ${questionsDir}. Expected format: chapter-01.json, chapter-02.json, etc.`);
+  }
+  
+  console.log(`  Found ${questionFiles.length} chapter question files`);
+  
+  let totalQuestions = 0;
+  let uploadedChapters = 0;
+  
+  for (const file of questionFiles) {
+    // Extract chapter number from filename (chapter-01.json -> 1)
+    const match = file.match(/chapter-(\d+)\.json$/);
+    if (!match) continue;
+    
+    const chapterNumber = parseInt(match[1], 10);
+    const filePath = path.join(questionsDir, file);
+    
+    try {
+      const fileContent = fs.readFileSync(filePath, 'utf-8');
+      const questions: AssessmentQuestion[] = JSON.parse(fileContent);
+      
+      if (!Array.isArray(questions) || questions.length === 0) {
+        console.log(`  ⚠ Skipping ${file}: empty or invalid format`);
+        continue;
+      }
+      
+      // Validate and enrich questions
+      const enrichedQuestions = questions.map((q, idx) => ({
+        ...q,
+        bookId: bookId,
+        chapterNumber: chapterNumber,
+        // Ensure required fields have defaults
+        hints: q.hints || [],
+        tags: q.tags || { difficulty: 'medium', themes: [], elements: [] },
+      }));
+      
+      // Create DynamoDB record for this chapter's questions
+      const questionRecord = {
+        PK: `book#${bookId}`,
+        SK: `questions#${chapterNumber}`,
+        type: 'questions',
+        chapterNumber: chapterNumber,
+        questions: enrichedQuestions,
+        questionCount: enrichedQuestions.length,
+        uploadedAt: Date.now(),
+        // Index by difficulty for quick filtering
+        difficultyCounts: {
+          basic: enrichedQuestions.filter(q => q.tags?.difficulty === 'basic').length,
+          medium: enrichedQuestions.filter(q => q.tags?.difficulty === 'medium').length,
+          deep: enrichedQuestions.filter(q => q.tags?.difficulty === 'deep').length,
+          mastery: enrichedQuestions.filter(q => q.tags?.difficulty === 'mastery').length,
+        },
+        // Index by type for quick filtering
+        typeCounts: {
+          MCQ: enrichedQuestions.filter(q => q.type === 'MCQ').length,
+          TRUE_FALSE: enrichedQuestions.filter(q => q.type === 'TRUE_FALSE').length,
+          SHORT_ANSWER: enrichedQuestions.filter(q => q.type === 'SHORT_ANSWER').length,
+          FILL_BLANK: enrichedQuestions.filter(q => q.type === 'FILL_BLANK').length,
+          BRIEF_RESPONSE: enrichedQuestions.filter(q => q.type === 'BRIEF_RESPONSE').length,
+        },
+      };
+      
+      await putDynamoItem(questionRecord);
+      console.log(`  ✓ Chapter ${chapterNumber}: ${enrichedQuestions.length} questions`);
+      
+      totalQuestions += enrichedQuestions.length;
+      uploadedChapters++;
+      
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.log(`  ✗ Chapter ${chapterNumber}: ${err.message}`);
+    }
+  }
+  
+  console.log(`\n✓ Questions uploaded successfully!`);
+  console.log(`  Chapters: ${uploadedChapters}`);
+  console.log(`  Total questions: ${totalQuestions}`);
+}
+
+/**
+ * Parse command line arguments for questions upload
+ */
+function parseQuestionsArgs(): { bookId: string; questionsDir: string } | null {
+  const args = process.argv.slice(2);
+  
+  const uploadQuestionsIdx = args.indexOf('--upload-questions');
+  if (uploadQuestionsIdx === -1) {
+    return null;
+  }
+  
+  if (args.length < uploadQuestionsIdx + 3) {
+    console.log(`
+Usage: npx tsx upload-book.ts --upload-questions <book-id> <questions-folder>
+
+Example:
+  npx tsx upload-book.ts --upload-questions 2f5738f7-f856-4026-ac71-8457e01a06dc ./books/pride-and-prejudice/questions
+`);
+    process.exit(0);
+  }
+  
+  return {
+    bookId: args[uploadQuestionsIdx + 1],
+    questionsDir: args[uploadQuestionsIdx + 2],
+  };
 }
 
 main().catch((error: Error & { code?: string }) => {

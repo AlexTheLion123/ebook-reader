@@ -1,4 +1,4 @@
-import { BookContentResponse, AskResponse, SummarizeResponse, GenerateQuizResponse, EvaluateQuizResponse, Book } from '../types';
+import { BookContentResponse, AskResponse, SummarizeResponse, GenerateQuizResponse, EvaluateQuizResponse, Book, GetQuestionsResponse, QuestionType } from '../types';
 
 const BASE_URL = 'https://6ga7cukouj.execute-api.eu-west-1.amazonaws.com/prod';
 
@@ -106,6 +106,78 @@ export const listBooks = async (): Promise<Book[]> => {
     return data.books || [];
   } catch (error) {
     console.error('Error listing books:', error);
+    throw error;
+  }
+};
+
+export interface FetchQuestionsParams {
+  bookId: string;
+  chapters?: number[];
+  difficulty?: ('basic' | 'medium' | 'deep' | 'mastery')[];
+  types?: QuestionType[];
+  limit?: number;
+  shuffle?: boolean;
+}
+
+export const fetchQuestions = async (params: FetchQuestionsParams): Promise<GetQuestionsResponse> => {
+  try {
+    const queryParams = new URLSearchParams();
+    
+    if (params.chapters && params.chapters.length > 0) {
+      queryParams.set('chapters', params.chapters.join(','));
+    }
+    if (params.difficulty && params.difficulty.length > 0) {
+      queryParams.set('difficulty', params.difficulty.join(','));
+    }
+    if (params.types && params.types.length > 0) {
+      queryParams.set('types', params.types.join(','));
+    }
+    if (params.limit) {
+      queryParams.set('limit', params.limit.toString());
+    }
+    if (params.shuffle !== undefined) {
+      queryParams.set('shuffle', params.shuffle.toString());
+    }
+    
+    const queryString = queryParams.toString();
+    const url = `${BASE_URL}/questions/${params.bookId}${queryString ? `?${queryString}` : ''}`;
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch questions: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching questions:', error);
+    throw error;
+  }
+};
+
+export interface EvaluateAnswerParams {
+  question: string;
+  userAnswer: string;
+  correctAnswer: string;
+  type: QuestionType;
+  acceptableAnswers?: string[];
+  rubric?: string;
+}
+
+export const evaluateAnswer = async (params: EvaluateAnswerParams): Promise<EvaluateQuizResponse> => {
+  try {
+    const response = await fetch(`${BASE_URL}/quiz/evaluate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to evaluate answer: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error evaluating answer:', error);
     throw error;
   }
 };

@@ -84,15 +84,64 @@ export interface BookListResponse {
   books: Book[];
 }
 
-export type QuestionType = 'MCQ' | 'SHORT_ANSWER' | 'FILL_BLANK' | 'TRUE_FALSE';
+export type QuestionType = 'MCQ' | 'SHORT_ANSWER' | 'FILL_BLANK' | 'TRUE_FALSE' | 'BRIEF_RESPONSE';
 
+// Hint structure for progressive hints
+export interface QuestionHint {
+  level: 'small' | 'medium';
+  text: string;
+}
+
+// Tags for filtering and categorization
+export interface QuestionTags {
+  difficulty: 'basic' | 'medium' | 'deep' | 'mastery';
+  themes: string[];
+  elements: string[];
+}
+
+// Full assessment question from pre-generated questions
+export interface AssessmentQuestion {
+  id: string;
+  bookId: string;
+  chapterNumber: number;
+  type: QuestionType;
+  text: string;
+  options?: string[]; // For MCQ, TRUE_FALSE
+  correctAnswer: string;
+  acceptableAnswers?: string[]; // For SHORT_ANSWER, BRIEF_RESPONSE
+  rubric?: string; // Grading criteria for open-ended questions
+  hints: QuestionHint[];
+  explanation: string;
+  tags: QuestionTags;
+}
+
+// Legacy Question interface (for backward compatibility)
 export interface Question {
-  id: number;
+  id: number | string;
   type: QuestionType;
   text: string;
   options?: string[]; // For MCQ
   correctAnswer: string; // For validation
   explanation: string;
+  // Extended fields from AssessmentQuestion
+  hints?: QuestionHint[];
+  tags?: QuestionTags;
+  acceptableAnswers?: string[];
+  rubric?: string;
+  chapterNumber?: number;
+}
+
+// Response from GET /questions/{bookId}
+export interface GetQuestionsResponse {
+  bookId: string;
+  questions: AssessmentQuestion[];
+  totalCount: number;
+  filters: {
+    chapters?: number[];
+    difficulty?: string[];
+    types?: string[];
+    limit?: number;
+  };
 }
 
 // Dashboard progress types

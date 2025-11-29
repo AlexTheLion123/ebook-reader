@@ -1,67 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag } from 'lucide-react';
-import { BookDetails, Question, QuestionType } from '../types';
+import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag, Lightbulb, Loader2 } from 'lucide-react';
+import { BookDetails, Question, QuestionType, AssessmentQuestion, QuestionHint } from '../types';
 import { HintSidebar } from './HintSidebar';
+import { fetchQuestions, evaluateAnswer } from '../services/backendService';
 
 interface TestSuiteProps {
   book: BookDetails;
   onClose: () => void;
 }
 
-type TestStep = 'CONFIG' | 'QUIZ' | 'RESULTS';
-
-// Mock Data Pool
-const MOCK_QUESTIONS: Question[] = [
-  {
-    id: 1,
-    type: 'MCQ',
-    text: "What is the primary motivation driving the protagonist's actions in the first half of the book?",
-    options: [
-      "A desire for revenge against a former lover",
-      "The pursuit of forbidden knowledge",
-      "The need to escape a totalitarian regime",
-      "Financial desperation"
-    ],
-    correctAnswer: "The need to escape a totalitarian regime",
-    explanation: "Throughout the early chapters, the protagonist's internal monologue focuses heavily on the oppressive nature of the state and the desire for individual freedom."
-  },
-  {
-    id: 2,
-    type: 'TRUE_FALSE',
-    text: "True or False: The central conflict is resolved peacefully through diplomatic dialogue.",
-    options: ["True", "False"],
-    correctAnswer: "False",
-    explanation: "The climax involves a violent confrontation that fundamentally changes the power dynamic, proving that diplomacy had failed."
-  },
-  {
-    id: 3,
-    type: 'MCQ',
-    text: "Which symbol represents the loss of innocence in the narrative?",
-    options: ["The White Bird", "The Broken Clock", "The Dusty Mirror", "The Golden Coin"],
-    correctAnswer: "The Broken Clock",
-    explanation: "The broken clock appears specifically in scenes where characters confront their childhood memories, symbolizing the freezing of time and loss of innocence."
-  },
-  {
-    id: 4,
-    type: 'FILL_BLANK',
-    text: "The antagonist's philosophy is best described as ______ utilitarianism.",
-    correctAnswer: "ruthless",
-    explanation: "Critics often describe the antagonist's approach as 'ruthless utilitarianism' because they justify any means for the 'greater good'."
-  },
-  {
-    id: 5,
-    type: 'MCQ',
-    text: "How does the setting contribute to the overall mood of the story?",
-    options: [
-      "It provides a cheerful contrast to the dark themes",
-      "The constant rain and grey skies mirror the internal depression of the characters",
-      "It is irrelevant to the plot",
-      "It represents a technological utopia"
-    ],
-    correctAnswer: "The constant rain and grey skies mirror the internal depression of the characters",
-    explanation: "Pathetic fallacy is used extensively; the weather almost always reflects the protagonist's emotional state."
-  }
-];
+type TestStep = 'CONFIG' | 'LOADING' | 'QUIZ' | 'RESULTS';
 
 export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   const [step, setStep] = useState<TestStep>('CONFIG');
@@ -74,14 +22,25 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   const [difficulty, setDifficulty] = useState<'BASIC' | 'MEDIUM' | 'DEEP' | 'MASTERY'>('MEDIUM');
   const [testMode, setTestMode] = useState<'QUICK' | 'STANDARD' | 'THOROUGH'>('QUICK');
 
+  // Questions State (fetched from API)
+  const [questions, setQuestions] = useState<AssessmentQuestion[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // Quiz State
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState('');
   const [isAnswerChecked, setIsAnswerChecked] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const [score, setScore] = useState(0);
-  const [answers, setAnswers] = useState<{questionId: number, correct: boolean}[]>([]);
+  const [answers, setAnswers] = useState<{questionId: string, correct: boolean, feedback?: string}[]>([]);
+  const [currentFeedback, setCurrentFeedback] = useState<string | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0); // in seconds
+
+  // Hints State
+  const [revealedHintIndex, setRevealedHintIndex] = useState(-1); // -1 = no hints shown
+  const [isHintSidebarOpen, setIsHintSidebarOpen] = useState(false);
 
   // AI Assist State
   const [isAiAssistOpen, setIsAiAssistOpen] = useState(false);
@@ -112,9 +71,14 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   };
 
   // Derived State
-  const currentQuestion = MOCK_QUESTIONS[currentQuestionIndex % MOCK_QUESTIONS.length];
+  const currentQuestion = questions[currentQuestionIndex] || null;
   const currentModeConfig = TEST_MODE_CONFIG[testMode];
-  const progress = ((currentQuestionIndex) / currentModeConfig.targetQuestions) * 100;
+  const totalQuestions = Math.min(questions.length, currentModeConfig.targetQuestions);
+  const progress = totalQuestions > 0 ? ((currentQuestionIndex) / totalQuestions) * 100 : 0;
+
+  // Get available hints for current question
+  const currentHints = currentQuestion?.hints || [];
+  const hasMoreHints = revealedHintIndex < currentHints.length - 1;
 
   // Chapter Selection Helpers
   const toggleChapter = (index: number) => {
@@ -177,8 +141,50 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
     }
   };
 
+  // Fetch questions from API
+  const loadQuestions = async () => {
+    if (!book.id) {
+      setLoadError('Book ID not available');
+      return;
+    }
+
+    setLoadingQuestions(true);
+    setLoadError(null);
+
+    try {
+      // Build chapter filter based on scope
+      let chapters: number[] | undefined;
+      if (scope === 'CHAPTER' && selectedChapters.length > 0) {
+        // Convert 0-indexed to 1-indexed chapter numbers
+        chapters = selectedChapters.map(i => i + 1);
+      }
+
+      const response = await fetchQuestions({
+        bookId: book.id,
+        chapters,
+        difficulty: [difficulty.toLowerCase() as 'basic' | 'medium' | 'deep' | 'mastery'],
+        limit: currentModeConfig.targetQuestions,
+        shuffle: true,
+      });
+
+      if (response.questions.length === 0) {
+        setLoadError('No questions found for the selected criteria. Try selecting different chapters or difficulty.');
+        setLoadingQuestions(false);
+        return;
+      }
+
+      setQuestions(response.questions);
+      setLoadingQuestions(false);
+      setStep('QUIZ');
+    } catch (error) {
+      console.error('Failed to load questions:', error);
+      setLoadError('Failed to load questions. Please try again.');
+      setLoadingQuestions(false);
+    }
+  };
+
   const handleStart = () => {
-    setStep('QUIZ');
+    // Reset quiz state
     setCurrentQuestionIndex(0);
     setScore(0);
     setAnswers([]);
@@ -186,32 +192,97 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
     setSelectedOption(null);
     setTextAnswer('');
     setElapsedTime(0);
+    setRevealedHintIndex(-1);
+    setCurrentFeedback(null);
+    
+    // Start loading questions
+    setStep('LOADING');
+    loadQuestions();
   };
 
-  const handleCheckAnswer = () => {
-    let isCorrect = false;
+  const handleCheckAnswer = async () => {
+    if (!currentQuestion) return;
     
+    const userAnswer = currentQuestion.type === 'MCQ' || currentQuestion.type === 'TRUE_FALSE'
+      ? selectedOption || ''
+      : textAnswer;
+
+    // For MCQ, TRUE_FALSE - do local exact match (fast, no API call)
     if (currentQuestion.type === 'MCQ' || currentQuestion.type === 'TRUE_FALSE') {
-      isCorrect = selectedOption === currentQuestion.correctAnswer;
-    } else {
-      // Mock validation for text inputs
-      isCorrect = textAnswer.toLowerCase().includes(currentQuestion.correctAnswer.toLowerCase().split(' ')[0]);
+      const isCorrect = userAnswer === currentQuestion.correctAnswer;
+      if (isCorrect) setScore(prev => prev + 1);
+      setAnswers(prev => [...prev, { questionId: currentQuestion.id, correct: isCorrect }]);
+      setCurrentFeedback(isCorrect ? 'Correct!' : `Incorrect. The correct answer is: ${currentQuestion.correctAnswer}`);
+      setIsAnswerChecked(true);
+      return;
     }
 
-    if (isCorrect) setScore(prev => prev + 1);
-    
-    setAnswers(prev => [...prev, { questionId: currentQuestion.id, correct: isCorrect }]);
-    setIsAnswerChecked(true);
+    // For FILL_BLANK - check against correctAnswer and acceptableAnswers locally
+    if (currentQuestion.type === 'FILL_BLANK') {
+      const normalizedAnswer = userAnswer.trim().toLowerCase();
+      const allAcceptable = [
+        currentQuestion.correctAnswer.toLowerCase(),
+        ...(currentQuestion.acceptableAnswers || []).map(a => a.toLowerCase())
+      ];
+      const isCorrect = allAcceptable.some(acceptable => 
+        normalizedAnswer === acceptable || 
+        normalizedAnswer.includes(acceptable) ||
+        acceptable.includes(normalizedAnswer)
+      );
+      if (isCorrect) setScore(prev => prev + 1);
+      setAnswers(prev => [...prev, { questionId: currentQuestion.id, correct: isCorrect }]);
+      setCurrentFeedback(isCorrect ? 'Correct!' : `Incorrect. The correct answer is: ${currentQuestion.correctAnswer}`);
+      setIsAnswerChecked(true);
+      return;
+    }
+
+    // For SHORT_ANSWER, BRIEF_RESPONSE - use Bedrock AI evaluation
+    setIsEvaluating(true);
+    try {
+      const result = await evaluateAnswer({
+        question: currentQuestion.text,
+        userAnswer,
+        correctAnswer: currentQuestion.correctAnswer,
+        type: currentQuestion.type,
+        acceptableAnswers: currentQuestion.acceptableAnswers,
+        rubric: currentQuestion.rubric,
+      });
+
+      if (result.isCorrect) setScore(prev => prev + 1);
+      setAnswers(prev => [...prev, { 
+        questionId: currentQuestion.id, 
+        correct: result.isCorrect,
+        feedback: result.feedback 
+      }]);
+      setCurrentFeedback(result.feedback);
+      setIsAnswerChecked(true);
+    } catch (error) {
+      console.error('Failed to evaluate answer:', error);
+      // Fallback to showing as incorrect with error message
+      setAnswers(prev => [...prev, { questionId: currentQuestion.id, correct: false }]);
+      setCurrentFeedback('Unable to evaluate answer. Please try again.');
+      setIsAnswerChecked(true);
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleRevealHint = () => {
+    if (hasMoreHints) {
+      setRevealedHintIndex(prev => prev + 1);
+    }
   };
 
   const handleNext = () => {
-    if (currentQuestionIndex + 1 >= currentModeConfig.targetQuestions) {
+    if (currentQuestionIndex + 1 >= totalQuestions) {
       setStep('RESULTS');
     } else {
       setCurrentQuestionIndex(prev => prev + 1);
       setIsAnswerChecked(false);
       setSelectedOption(null);
       setTextAnswer('');
+      setRevealedHintIndex(-1);
+      setCurrentFeedback(null);
     }
   };
 
@@ -402,16 +473,48 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
         <button 
             onClick={handleStart}
-            className="w-full bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+            disabled={loadingQuestions}
+            className="w-full bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
             <GraduationCap className="w-5 h-5" />
             Start Assessment
         </button>
+
+        {/* Error Message */}
+        {loadError && (
+          <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+            {loadError}
+          </div>
+        )}
        </div>
     </div>
   );
 
-  const renderQuiz = () => (
+  const renderLoading = () => (
+    <div className="w-full max-w-md bg-[#3E2723] rounded-2xl shadow-2xl border border-[#A1887F]/30 p-8 relative z-10 animate-slide-up my-auto flex flex-col items-center justify-center">
+      <Loader2 className="w-12 h-12 text-brand-orange animate-spin mb-4" />
+      <h3 className="text-xl font-bold text-white mb-2">Loading Questions</h3>
+      <p className="text-brand-cream/60 text-center text-sm">
+        Fetching {currentModeConfig.targetQuestions} questions based on your criteria...
+      </p>
+    </div>
+  );
+
+  const renderQuiz = () => {
+    if (!currentQuestion) {
+      return (
+        <div className="w-full max-w-md mx-auto flex flex-col items-center justify-center h-full">
+          <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
+          <h3 className="text-xl font-bold text-white mb-2">No Questions Available</h3>
+          <p className="text-brand-cream/60 text-center mb-4">Unable to load questions for this assessment.</p>
+          <button onClick={onClose} className="px-6 py-2 bg-brand-orange rounded-lg text-white font-bold">
+            Return to Book
+          </button>
+        </div>
+      );
+    }
+
+    return (
     <div className="w-full max-w-4xl mx-auto flex flex-col h-full animate-fade-in">
       
       {/* Scrollable Content Area */}
@@ -420,8 +523,13 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
           {/* Progress Section */}
           <div className="mb-6 md:mb-10 w-full max-w-3xl mx-auto">
             <div className="flex items-center justify-between mb-2 md:mb-3 text-brand-cream/60">
-              <span className="font-mono text-xs md:text-sm tracking-widest font-bold">QUESTION {currentQuestionIndex + 1} / {currentModeConfig.targetQuestions}</span>
+              <span className="font-mono text-xs md:text-sm tracking-widest font-bold">QUESTION {currentQuestionIndex + 1} / {totalQuestions}</span>
               <div className="flex items-center gap-3">
+                {currentQuestion.tags?.difficulty && (
+                  <span className="hidden md:inline-block text-[10px] font-bold px-2 py-0.5 bg-white/5 rounded text-brand-cream/40 border border-white/5 tracking-wider uppercase">
+                    {currentQuestion.tags.difficulty}
+                  </span>
+                )}
                 <span className="hidden md:inline-block text-[10px] font-bold px-2 py-0.5 bg-white/5 rounded text-brand-cream/40 border border-white/5 tracking-wider">{currentModeConfig.label}</span>
                 <div className="flex items-center gap-1.5 text-xs font-mono bg-black/30 px-2 py-1 rounded">
                   <Timer className="w-3 h-3 text-brand-orange" />
@@ -440,9 +548,52 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
           {/* Main Question Area */}
           <div className="flex flex-col items-center justify-start w-full max-w-3xl mx-auto pb-6">
             <div className="w-full mb-4 md:mb-8">
+                {/* Chapter indicator */}
+                {currentQuestion.chapterNumber && (
+                  <div className="text-xs text-brand-cream/40 mb-2 uppercase tracking-wider">
+                    Chapter {currentQuestion.chapterNumber}
+                  </div>
+                )}
+                
                 <h3 className="text-xl md:text-3xl lg:text-4xl font-bold text-white mb-6 md:mb-8 leading-snug drop-shadow-sm">
                     {currentQuestion.text}
                 </h3>
+
+                {/* Hints Section - Show before answer is checked */}
+                {!isAnswerChecked && currentHints.length > 0 && (
+                  <div className="mb-6 space-y-2">
+                    {/* Revealed hints */}
+                    {currentHints.slice(0, revealedHintIndex + 1).map((hint, idx) => (
+                      <div 
+                        key={idx} 
+                        className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg animate-fade-in"
+                      >
+                        <div className="flex items-start gap-2">
+                          <Lightbulb className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+                          <div>
+                            <span className="text-xs text-yellow-400/70 uppercase tracking-wider font-bold">
+                              Hint {idx + 1} ({hint.level})
+                            </span>
+                            <p className="text-sm text-brand-cream/90 mt-1">{hint.text}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Hint button */}
+                    {hasMoreHints && (
+                      <button
+                        onClick={handleRevealHint}
+                        className="flex items-center gap-2 px-3 py-2 text-sm text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 rounded-lg transition-colors"
+                      >
+                        <Lightbulb className="w-4 h-4" />
+                        <span>
+                          {revealedHintIndex < 0 ? 'Need a hint?' : `Show another hint (${currentHints.length - revealedHintIndex - 1} left)`}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Answer Area */}
                 <div className="space-y-3 md:space-y-4 w-full">
@@ -505,7 +656,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
             </div>
 
             {/* Feedback Section */}
-            {isAnswerChecked && (
+            {isAnswerChecked && answers.length > 0 && (
               <div className={`w-full p-4 md:p-6 rounded-2xl animate-slide-up border backdrop-blur-sm ${
                 answers[answers.length - 1].correct 
                 ? 'bg-green-500/10 border-green-500/20' 
@@ -521,11 +672,22 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                         <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-red-400" />
                     </div>
                   )}
-                  <div>
+                  <div className="flex-1">
                     <h4 className={`font-bold text-base md:text-lg mb-1 md:mb-2 ${answers[answers.length - 1].correct ? 'text-green-400' : 'text-red-400'}`}>
                       {answers[answers.length - 1].correct ? 'Correct!' : 'Not quite right.'}
                     </h4>
+                    
+                    {/* AI Feedback for essay questions */}
+                    {currentFeedback && (currentQuestion.type === 'SHORT_ANSWER' || currentQuestion.type === 'BRIEF_RESPONSE') && (
+                      <p className="text-brand-cream/90 leading-relaxed text-sm md:text-base mb-3 p-3 bg-black/20 rounded-lg border border-white/5">
+                        <span className="text-xs text-brand-orange uppercase tracking-wider font-bold block mb-1">AI Feedback</span>
+                        {currentFeedback}
+                      </p>
+                    )}
+                    
+                    {/* Explanation */}
                     <p className="text-brand-cream/90 leading-relaxed text-sm md:text-base">
+                      <span className="text-xs text-brand-cream/50 uppercase tracking-wider font-bold block mb-1">Explanation</span>
                       {currentQuestion.explanation}
                     </p>
                   </div>
@@ -537,21 +699,28 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
       {/* Sticky Footer Actions */}
       <div className="p-4 md:p-6 border-t border-white/5 bg-[#1a110e] w-full z-30 shrink-0 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.5)]">
-        <div className="max-w-3xl mx-auto flex justify-end">
+        <div className="max-w-3xl mx-auto flex justify-end gap-3">
             {!isAnswerChecked ? (
             <button 
                 onClick={handleCheckAnswer}
-                disabled={(!selectedOption && !textAnswer)}
+                disabled={(!selectedOption && !textAnswer) || isEvaluating}
                 className="w-full md:w-auto px-6 md:px-10 py-3 md:py-4 bg-white text-[#3E2723] font-bold text-base md:text-lg rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:bg-brand-cream transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-0.5"
             >
-                Check Answer
+                {isEvaluating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Evaluating...
+                  </>
+                ) : (
+                  'Check Answer'
+                )}
             </button>
             ) : (
             <button 
                 onClick={handleNext}
                 className="w-full md:w-auto px-6 md:px-10 py-3 md:py-4 bg-brand-orange text-white font-bold text-base md:text-lg rounded-xl shadow-[0_0_20px_rgba(243,120,53,0.3)] hover:bg-brand-darkOrange transition-all flex items-center justify-center gap-3 hover:-translate-y-0.5"
             >
-                {currentQuestionIndex + 1 >= currentModeConfig.targetQuestions ? 'View Results' : 'Next Question'}
+                {currentQuestionIndex + 1 >= totalQuestions ? 'View Results' : 'Next Question'}
                 <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
             </button>
             )}
@@ -559,9 +728,10 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
       </div>
     </div>
   );
+  };
 
   const renderResults = () => {
-    const percentage = Math.round((score / length) * 100);
+    const percentage = Math.round((score / totalQuestions) * 100);
     let grade = 'Needs Work';
     let color = 'text-red-400';
     let colorClass = 'text-red-400';
@@ -711,6 +881,10 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
            <div className="flex-1 flex flex-col items-center justify-center p-4 bg-black/60 backdrop-blur-md relative z-10 overflow-y-auto">
               {renderConfig()}
            </div>
+       ) : step === 'LOADING' ? (
+           <div className="flex-1 flex flex-col items-center justify-center p-4 bg-black/60 backdrop-blur-md relative z-10">
+              {renderLoading()}
+           </div>
        ) : (
            <>
               {/* Full Screen Header */}
@@ -756,7 +930,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
         isOpen={isAiAssistOpen}
         onClose={() => setIsAiAssistOpen(false)}
         book={book}
-        currentQuestion={currentQuestion}
+        currentQuestion={currentQuestion as Question}
       />
     </div>
   );

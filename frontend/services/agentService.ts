@@ -123,12 +123,44 @@ function generateMessageId(): string {
 }
 
 /**
+ * Quiz mode context for the agent
+ * Pass the full question JSON so the agent can grade, give hints, and show explanations
+ */
+export interface QuizModeContext {
+  mode: 'quiz' | 'study';
+  currentQuestion?: {
+    id: string;
+    text: string;
+    type: string;
+    options?: string[];
+    correctAnswer: string;
+    acceptableAnswers?: string[];
+    hints?: Array<{ level: string; text: string }>;
+    explanation: string;
+    rubric?: string;
+    chapterNumber: number;
+    tags?: {
+      difficulty?: string;
+      themes?: string[];
+      elements?: string[];
+    };
+  };
+  hintsUsed?: number; // Track how many hints have been revealed
+}
+
+/**
  * Send a message to the agent and get a response
+ * 
+ * @param bookId - The book ID for context
+ * @param message - The user's message
+ * @param onToolCall - Optional callback for tool call status
+ * @param quizContext - Optional quiz mode context (quiz vs study mode)
  */
 export async function sendMessage(
   bookId: string,
   message: string,
-  onToolCall?: (tool: string, status: 'started' | 'completed') => void
+  onToolCall?: (tool: string, status: 'started' | 'completed') => void,
+  quizContext?: QuizModeContext
 ): Promise<AgentChatResponse> {
   const session = getSession(bookId);
   
@@ -153,6 +185,7 @@ export async function sendMessage(
         message,
         bookId,
         enableTrace: true,
+        quizContext, // Pass quiz mode context to backend
       }),
     });
 
