@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Search, Loader2, Bell, BookOpen, LayoutGrid, List } from 'lucide-react';
 import { listBooks } from '../services/backendService';
-import { BookRecommendation, BookDetails } from '../types';
+import { BookRecommendation, BookDetails, BookProgress } from '../types';
 import { BookCard } from './BookCard';
 import { BookDetail } from './BookDetail';
 import { ReaderView } from './ReaderView';
 import { TestSuite } from './TestSuite';
+import { Dashboard } from './Dashboard';
 
 interface MainAppProps {
   initialQuery: string;
 }
+
+type AppView = 'HOME' | 'DETAILS' | 'READING' | 'TESTING' | 'DASHBOARD';
 
 export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
   const [query, setQuery] = useState(initialQuery);
@@ -17,24 +20,68 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [currentView, setCurrentView] = useState<AppView>('HOME');
   
   // Detail View State
   const [selectedBook, setSelectedBook] = useState<BookDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Reader State
-  const [isReading, setIsReading] = useState(false);
   const [readingChapterIndex, setReadingChapterIndex] = useState(0);
 
-  // Test Suite State
-  const [isTesting, setIsTesting] = useState(false);
+  // Mock progress data for dashboard (will be replaced with real data later)
+  const [progressData] = useState<BookProgress[]>([
+    {
+      bookTitle: 'Pride and Prejudice',
+      overallMastery: 42,
+      chaptersMastered: 18,
+      totalChapters: 61,
+      lastTestedDate: '2023-10-25',
+      weakAreas: ['Character Motivations', 'Historical Context', 'Irony'],
+      concepts: [
+        { name: 'Themes', score: 40 },
+        { name: 'Symbols', score: 30 },
+        { name: 'Characters', score: 65 },
+        { name: 'Irony', score: 55 },
+      ],
+      chapterBreakdown: [
+        // First 18 chapters mastered (green)
+        ...Array.from({ length: 18 }, (_, i) => ({ chapterIndex: i, status: 'MASTERED' as const, score: 85 + Math.floor(Math.random() * 15) })),
+        // Next 8 chapters in progress (yellow)
+        ...Array.from({ length: 8 }, (_, i) => ({ chapterIndex: i + 18, status: 'IN_PROGRESS' as const, score: 40 + Math.floor(Math.random() * 30) })),
+        // Remaining 35 chapters untouched (gray)
+        ...Array.from({ length: 35 }, (_, i) => ({ chapterIndex: i + 26, status: 'UNTOUCHED' as const, score: 0 })),
+      ],
+    },
+    {
+      bookTitle: 'Calculus Made Easy',
+      overallMastery: 28,
+      chaptersMastered: 5,
+      totalChapters: 23,
+      lastTestedDate: '2023-11-12',
+      weakAreas: ['Integration', 'Partial Fractions', 'Limits'],
+      concepts: [
+        { name: 'Derivatives', score: 72 },
+        { name: 'Integration', score: 25 },
+        { name: 'Limits', score: 35 },
+        { name: 'Applications', score: 18 },
+      ],
+      chapterBreakdown: [
+        // First 5 chapters mastered
+        ...Array.from({ length: 5 }, (_, i) => ({ chapterIndex: i, status: 'MASTERED' as const, score: 80 + Math.floor(Math.random() * 20) })),
+        // Next 4 in progress
+        ...Array.from({ length: 4 }, (_, i) => ({ chapterIndex: i + 5, status: 'IN_PROGRESS' as const, score: 30 + Math.floor(Math.random() * 35) })),
+        // Remaining 14 untouched
+        ...Array.from({ length: 14 }, (_, i) => ({ chapterIndex: i + 9, status: 'UNTOUCHED' as const, score: 0 })),
+      ],
+    },
+  ]);
 
   const fetchBooks = async (searchQuery?: string) => {
     setLoading(true);
     // Reset detail view when fetching books
     setSelectedBook(null);
-    setIsReading(false);
-    setIsTesting(false);
+    setCurrentView('HOME');
     
     try {
       const backendBooks = await listBooks();
@@ -88,17 +135,26 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     };
     
     setSelectedBook(details);
-    setIsTesting(false);
+    setCurrentView('DETAILS');
   };
 
   const handleStartReading = (chapterIndex: number) => {
     setReadingChapterIndex(chapterIndex);
-    setIsReading(true);
+    setCurrentView('READING');
   };
 
   const handleCloseReader = () => {
-    setIsReading(false);
+    setCurrentView('DETAILS');
     // Keep selectedBook so we go back to book details, not the main list
+  };
+
+  const handleNavHome = () => {
+    setSelectedBook(null);
+    setCurrentView('HOME');
+  };
+
+  const handleNavDashboard = () => {
+    setCurrentView('DASHBOARD');
   };
 
   useEffect(() => {
@@ -124,7 +180,7 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
   }
 
   // Render Reader View Overlay (Hides Navbar)
-  if (isReading && selectedBook) {
+  if (currentView === 'READING' && selectedBook) {
     return (
       <ReaderView 
         book={selectedBook} 
@@ -135,11 +191,11 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
   }
 
   // Render Test Suite Overlay (Hides Navbar)
-  if (isTesting && selectedBook) {
+  if (currentView === 'TESTING' && selectedBook) {
     return (
       <TestSuite 
         book={selectedBook} 
-        onClose={() => setIsTesting(false)} 
+        onClose={() => setCurrentView('DETAILS')} 
       />
     );
   }
@@ -148,31 +204,30 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     // Removed bg-gradient here because the background is now handled in App.tsx with the image
     <div className="min-h-screen w-full bg-transparent text-brand-cream overflow-y-auto">
       {/* Top Navigation Bar */}
-      <nav className="sticky top-0 z-40 w-full px-4 md:px-12 py-3 md:py-6 flex items-center justify-between bg-[#5D4037]/60 backdrop-blur-lg border-b border-white/10">
-        <div className="flex items-center gap-2 md:gap-3 cursor-pointer" onClick={() => setSelectedBook(null)}>
-          <div className="bg-brand-orange p-1.5 md:p-2 rounded-lg shadow-lg shadow-brand-orange/20">
-             <BookOpen className="w-5 h-5 md:w-6 md:h-6 text-white" />
+      <nav className="sticky top-0 z-40 w-full px-6 md:px-12 py-6 flex items-center justify-between bg-[#5D4037]/60 backdrop-blur-lg border-b border-white/10">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={handleNavHome}>
+          <div className="bg-brand-orange p-2 rounded-lg shadow-lg shadow-brand-orange/20">
+             <BookOpen className="w-6 h-6 text-white" />
           </div>
-          <span className="text-lg md:text-2xl font-bold tracking-tight text-white">Top Picks</span>
+          <span className="text-2xl font-bold tracking-tight text-white">QuickBook</span>
         </div>
 
         <div className="hidden md:flex items-center gap-8 font-medium text-brand-cream/90">
-          <a href="#" onClick={() => setSelectedBook(null)} className="hover:text-brand-orange transition-colors shadow-sm">Home</a>
-          <a href="#" onClick={() => setSelectedBook(null)} className="text-white font-bold hover:text-brand-orange transition-colors relative after:content-[''] after:absolute after:-bottom-2 after:left-0 after:w-full after:h-1 after:bg-brand-orange after:rounded-full">Library</a>
+          <button onClick={handleNavHome} className={`hover:text-brand-orange transition-colors shadow-sm ${currentView === 'HOME' ? 'text-white font-bold' : ''}`}>Library</button>
+          <button onClick={handleNavDashboard} className={`hover:text-brand-orange transition-colors shadow-sm ${currentView === 'DASHBOARD' ? 'text-white font-bold' : ''}`}>My Dashboard</button>
           <a href="#" className="hover:text-brand-orange transition-colors">About Us</a>
-          <a href="#" className="hover:text-brand-orange transition-colors">Contact Help</a>
         </div>
 
-        <div className="flex items-center gap-2 md:gap-4">
-          <button className="p-1.5 md:p-2 hover:bg-white/10 rounded-full transition-colors relative">
-            <Bell className="w-4 h-4 md:w-5 md:h-5 text-white" />
-            <span className="absolute top-1.5 right-1.5 md:top-2 md:right-2 w-1.5 h-1.5 md:w-2 md:h-2 bg-brand-orange rounded-full border border-[#5D4037] md:border-2"></span>
+        <div className="flex items-center gap-4">
+          <button className="p-2 hover:bg-white/10 rounded-full transition-colors relative">
+            <Bell className="w-5 h-5 text-white" />
+            <span className="absolute top-2 right-2 w-2 h-2 bg-brand-orange rounded-full border-2 border-[#5D4037]"></span>
           </button>
-          <button className="flex items-center gap-1.5 md:gap-2 bg-white/10 hover:bg-white/20 pl-1.5 md:pl-2 pr-2 md:pr-4 py-1 md:py-1.5 rounded-full transition-colors border border-white/10">
-            <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-br from-brand-orange to-brand-darkOrange rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shadow-inner">
+          <button className="flex items-center gap-2 bg-white/10 hover:bg-white/20 pl-2 pr-4 py-1.5 rounded-full transition-colors border border-white/10" onClick={handleNavDashboard}>
+            <div className="w-8 h-8 bg-gradient-to-br from-brand-orange to-brand-darkOrange rounded-full flex items-center justify-center text-white font-bold text-sm shadow-inner">
               JD
             </div>
-            <span className="text-xs md:text-sm font-medium hidden sm:block text-white">My Account</span>
+            <span className="text-sm font-medium hidden sm:block text-white">My Account</span>
           </button>
         </div>
       </nav>
@@ -180,16 +235,25 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
       {/* Main Content Area */}
       <main className="px-4 md:px-12 py-6 md:py-10 max-w-7xl mx-auto">
         
-        {selectedBook ? (
+        {currentView === 'DASHBOARD' ? (
+          <Dashboard 
+            progressData={progressData}
+            onBack={handleNavHome}
+            onContinue={(bookTitle) => {
+              setQuery(bookTitle);
+              fetchBooks(bookTitle);
+            }}
+          />
+        ) : currentView === 'DETAILS' && selectedBook ? (
           // DETAIL VIEW
           <BookDetail 
             book={selectedBook} 
-            onBack={() => setSelectedBook(null)} 
+            onBack={handleNavHome} 
             onRead={handleStartReading}
-            onTest={() => setIsTesting(true)}
+            onTest={() => setCurrentView('TESTING')}
           />
         ) : (
-          // LIST VIEW
+          // LIST VIEW (HOME)
           <>
             {/* Search Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6 mb-4 md:mb-6">

@@ -94,3 +94,26 @@ export interface Question {
   correctAnswer: string; // For validation
   explanation: string;
 }
+
+// Dashboard progress types
+export interface ConceptProgress {
+  name: string;
+  score: number; // 0-100
+}
+
+export interface ChapterProgress {
+  chapterIndex: number;
+  status: 'LOCKED' | 'UNTOUCHED' | 'IN_PROGRESS' | 'MASTERED';
+  score: number;
+}
+
+export interface BookProgress {
+  bookTitle: string;
+  overallMastery: number;
+  chaptersMastered: number;
+  totalChapters: number;
+  lastTestedDate: string;
+  weakAreas: string[];
+  concepts: ConceptProgress[];
+  chapterBreakdown: ChapterProgress[];
+}
