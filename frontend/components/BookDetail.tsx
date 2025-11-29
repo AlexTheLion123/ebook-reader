@@ -276,8 +276,8 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, 
 
             {/* Dropdown Content */}
             <div 
-              className={`transition-all duration-500 ease-in-out overflow-hidden ${
-                isChaptersOpen ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
+              className={`transition-all duration-500 ease-in-out ${
+                isChaptersOpen ? 'max-h-[500px] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0 overflow-hidden'
               }`}
             >
               <div className="p-3 md:p-5 pt-0 border-t border-white/5">

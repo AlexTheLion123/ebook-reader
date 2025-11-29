@@ -72,7 +72,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   const [selectedConcepts, setSelectedConcepts] = useState<string[]>([]);
   const [lastInteractionIndex, setLastInteractionIndex] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<'BASIC' | 'MEDIUM' | 'DEEP' | 'MASTERY'>('MEDIUM');
-  const [length, setLength] = useState<5 | 15 | 30>(5);
+  const [testMode, setTestMode] = useState<'QUICK' | 'STANDARD' | 'THOROUGH'>('QUICK');
 
   // Quiz State
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -104,9 +104,17 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Test mode configurations
+  const TEST_MODE_CONFIG = {
+    QUICK: { targetQuestions: 10, label: 'Quick', description: '~10 questions', subtext: 'Fast review' },
+    STANDARD: { targetQuestions: 20, label: 'Standard', description: '80% mastery target', subtext: 'Adaptive pacing' },
+    THOROUGH: { targetQuestions: 40, label: 'Thorough', description: 'Full Leitner', subtext: 'Until solidified' },
+  };
+
   // Derived State
   const currentQuestion = MOCK_QUESTIONS[currentQuestionIndex % MOCK_QUESTIONS.length];
-  const progress = ((currentQuestionIndex) / length) * 100;
+  const currentModeConfig = TEST_MODE_CONFIG[testMode];
+  const progress = ((currentQuestionIndex) / currentModeConfig.targetQuestions) * 100;
 
   // Chapter Selection Helpers
   const toggleChapter = (index: number) => {
@@ -197,7 +205,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   };
 
   const handleNext = () => {
-    if (currentQuestionIndex + 1 >= length) {
+    if (currentQuestionIndex + 1 >= currentModeConfig.targetQuestions) {
       setStep('RESULTS');
     } else {
       setCurrentQuestionIndex(prev => prev + 1);
@@ -373,19 +381,20 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
             </div>
         </div>
 
-        {/* Length */}
+        {/* Test Mode (Length) */}
         <div className="space-y-2">
             <label className="text-xs font-bold text-brand-orange uppercase tracking-wider flex items-center gap-2">
-            <Timer className="w-4 h-4" /> Length
+            <Timer className="w-4 h-4" /> Mode
             </label>
             <div className="grid grid-cols-3 gap-3">
-            {([5, 15, 30] as const).map((count) => (
+            {(['QUICK', 'STANDARD', 'THOROUGH'] as const).map((mode) => (
                 <button 
-                key={count}
-                onClick={() => setLength(count)}
-                className={`p-3 rounded-xl border transition-all text-center ${length === count ? 'bg-brand-orange/20 border-brand-orange text-white' : 'bg-black/20 border-white/5 text-brand-cream/60 hover:bg-white/5'}`}
+                key={mode}
+                onClick={() => setTestMode(mode)}
+                className={`p-3 rounded-xl border transition-all text-left ${testMode === mode ? 'bg-brand-orange/20 border-brand-orange text-white' : 'bg-black/20 border-white/5 text-brand-cream/60 hover:bg-white/5'}`}
                 >
-                <div className="font-bold text-sm">{count} Qs</div>
+                <div className="font-bold text-sm">{TEST_MODE_CONFIG[mode].label}</div>
+                <div className="text-[10px] opacity-60 mt-0.5">{TEST_MODE_CONFIG[mode].subtext}</div>
                 </button>
             ))}
             </div>
@@ -411,9 +420,9 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
           {/* Progress Section */}
           <div className="mb-6 md:mb-10 w-full max-w-3xl mx-auto">
             <div className="flex items-center justify-between mb-2 md:mb-3 text-brand-cream/60">
-              <span className="font-mono text-xs md:text-sm tracking-widest font-bold">QUESTION {currentQuestionIndex + 1} / {length}</span>
+              <span className="font-mono text-xs md:text-sm tracking-widest font-bold">QUESTION {currentQuestionIndex + 1} / {currentModeConfig.targetQuestions}</span>
               <div className="flex items-center gap-3">
-                <span className="hidden md:inline-block text-[10px] font-bold px-2 py-0.5 bg-white/5 rounded text-brand-cream/40 border border-white/5 tracking-wider">{difficulty}</span>
+                <span className="hidden md:inline-block text-[10px] font-bold px-2 py-0.5 bg-white/5 rounded text-brand-cream/40 border border-white/5 tracking-wider">{currentModeConfig.label}</span>
                 <div className="flex items-center gap-1.5 text-xs font-mono bg-black/30 px-2 py-1 rounded">
                   <Timer className="w-3 h-3 text-brand-orange" />
                   <span>{formatTime(elapsedTime)}</span>
@@ -542,7 +551,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                 onClick={handleNext}
                 className="w-full md:w-auto px-6 md:px-10 py-3 md:py-4 bg-brand-orange text-white font-bold text-base md:text-lg rounded-xl shadow-[0_0_20px_rgba(243,120,53,0.3)] hover:bg-brand-darkOrange transition-all flex items-center justify-center gap-3 hover:-translate-y-0.5"
             >
-                {currentQuestionIndex + 1 >= length ? 'View Results' : 'Next Question'}
+                {currentQuestionIndex + 1 >= currentModeConfig.targetQuestions ? 'View Results' : 'Next Question'}
                 <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
             </button>
             )}
