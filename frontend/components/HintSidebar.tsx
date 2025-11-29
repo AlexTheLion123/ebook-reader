@@ -14,7 +14,7 @@ interface HintSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   book: BookDetails;
-  currentQuestion: Question;
+  currentQuestion: Question | null;
 }
 
 export const HintSidebar: React.FC<HintSidebarProps> = ({
@@ -41,6 +41,30 @@ export const HintSidebar: React.FC<HintSidebarProps> = ({
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages, isOpen, isAiThinking]);
+
+  // Early return if sidebar is closed or no question
+  if (!isOpen) return null;
+  
+  if (!currentQuestion) {
+    return (
+      <div className={`fixed top-0 right-0 h-full w-full md:w-[360px] bg-[#3E2723] shadow-xl z-50 flex flex-col transform transition-transform duration-300 ease-out border-l border-[#A1887F]/30 translate-x-0`}>
+        <div className="shrink-0 p-4 bg-[#2a1d18] border-b border-[#A1887F]/30 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-brand-orange/20 p-1.5 rounded-lg">
+              <Bot className="w-5 h-5 text-brand-orange" />
+            </div>
+            <h3 className="font-bold text-white text-sm">AI Assist</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-lg text-brand-cream/50 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-6 text-center">
+          <p className="text-brand-cream/50 text-sm">No question selected. Start a quiz to get AI assistance.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSendChat = async (e?: React.FormEvent) => {
     e?.preventDefault();

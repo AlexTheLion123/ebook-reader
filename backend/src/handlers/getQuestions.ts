@@ -39,10 +39,18 @@ interface GetQuestionsResponse {
   };
 }
 
+interface QuestionMetadataResponse {
+  bookId: string;
+  availableChapters: number[];
+  totalQuestions: number;
+  questionsByChapter: Record<number, number>;
+}
+
 /**
  * GET /questions/{bookId}
  * 
  * Query parameters:
+ *   - metadata: if "true", returns only available chapters (no questions)
  *   - chapters: comma-separated chapter numbers (e.g., "1,2,3")
  *   - difficulty: comma-separated difficulty levels (e.g., "basic,medium")
  *   - types: comma-separated question types (e.g., "MCQ,TRUE_FALSE")
@@ -67,9 +75,45 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       };
     }
 
-    // Parse query parameters
+    const pk = `book#${bookId}`;
     const queryParams = event.queryStringParameters || {};
-    
+
+    // Metadata-only mode: return available chapters without fetching all questions
+    if (queryParams.metadata === 'true') {
+      const questionItems = await queryItems(process.env.CONTENT_TABLE!, pk, 'questions#');
+      
+      const availableChapters: number[] = [];
+      const questionsByChapter: Record<number, number> = {};
+      let totalQuestions = 0;
+
+      for (const item of questionItems) {
+        // SK format: questions#<chapterNumber>
+        const chapterNum = parseInt(item.SK.split('#')[1], 10);
+        if (!isNaN(chapterNum)) {
+          availableChapters.push(chapterNum);
+          const count = Array.isArray(item.questions) ? item.questions.length : 0;
+          questionsByChapter[chapterNum] = count;
+          totalQuestions += count;
+        }
+      }
+
+      availableChapters.sort((a, b) => a - b);
+
+      const response: QuestionMetadataResponse = {
+        bookId,
+        availableChapters,
+        totalQuestions,
+        questionsByChapter,
+      };
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(response),
+      };
+    }
+
+    // Parse query parameters for questions fetch
     const chapters = queryParams.chapters
       ? queryParams.chapters.split(',').map(c => parseInt(c.trim(), 10)).filter(n => !isNaN(n))
       : null;
@@ -84,8 +128,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     
     const limit = queryParams.limit ? parseInt(queryParams.limit, 10) : 50;
     const shuffle = queryParams.shuffle !== 'false'; // Default true
-
-    const pk = `book#${bookId}`;
     
     // Fetch questions from DynamoDB
     let allQuestions: AssessmentQuestion[] = [];

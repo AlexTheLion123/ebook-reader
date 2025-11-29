@@ -214,3 +214,30 @@ export const getHint = async (
     throw error;
   }
 };
+
+/**
+ * Question metadata response - which chapters have questions
+ */
+export interface QuestionMetadataResponse {
+  bookId: string;
+  availableChapters: number[];
+  totalQuestions: number;
+  questionsByChapter: Record<number, number>;
+}
+
+/**
+ * Fetch metadata about which chapters have questions available
+ */
+export const fetchQuestionMetadata = async (bookId: string): Promise<QuestionMetadataResponse> => {
+  try {
+    const response = await fetch(`${BASE_URL}/questions/${bookId}?metadata=true`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch question metadata: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching question metadata:', error);
+    throw error;
+  }
+};

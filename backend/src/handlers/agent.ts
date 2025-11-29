@@ -247,10 +247,18 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     }
 
     const fullResponse = chunks.join('');
-    console.log(`Response length: ${fullResponse.length}, Tool calls: ${toolCalls.length}, KB results: ${knowledgeBaseResults.length}`);
+    
+    // Strip out any <<CONVERSATION MODE>> blocks from the response
+    // (The agent sometimes echoes these back)
+    const cleanedResponse = fullResponse
+      .replace(/<<CONVERSATION MODE>>[\s\S]*?(?=\n\n|$)/g, '')
+      .replace(/^Mode: (quiz|study)\n?/gm, '')
+      .trim();
+    
+    console.log(`Response length: ${cleanedResponse.length}, Tool calls: ${toolCalls.length}, KB results: ${knowledgeBaseResults.length}`);
 
     const agentResponse: AgentResponse = {
-      response: fullResponse,
+      response: cleanedResponse,
       sessionId: finalSessionId,
     };
 

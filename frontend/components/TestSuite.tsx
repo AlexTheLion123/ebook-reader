@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag, Lightbulb, Loader2 } from 'lucide-react';
 import { BookDetails, Question, QuestionType, AssessmentQuestion, QuestionHint } from '../types';
 import { HintSidebar } from './HintSidebar';
-import { fetchQuestions, evaluateAnswer } from '../services/backendService';
+import { fetchQuestions, evaluateAnswer, fetchQuestionMetadata, QuestionMetadataResponse } from '../services/backendService';
 
 interface TestSuiteProps {
   book: BookDetails;
@@ -26,6 +26,45 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   const [questions, setQuestions] = useState<AssessmentQuestion[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Question Metadata State (which chapters have questions)
+  const [questionMetadata, setQuestionMetadata] = useState<QuestionMetadataResponse | null>(null);
+  const [loadingMetadata, setLoadingMetadata] = useState(true);
+
+  // Fetch question metadata on mount to know which chapters have questions
+  useEffect(() => {
+    const loadMetadata = async () => {
+      if (!book?.id) {
+        setLoadingMetadata(false);
+        return;
+      }
+      
+      try {
+        setLoadingMetadata(true);
+        const metadata = await fetchQuestionMetadata(book.id);
+        setQuestionMetadata(metadata);
+      } catch (error) {
+        console.error('Failed to load question metadata:', error);
+        // Not critical - we can still let users try, just won't show availability
+      } finally {
+        setLoadingMetadata(false);
+      }
+    };
+
+    loadMetadata();
+  }, [book?.id]);
+
+  // Helper to check if a chapter has questions
+  const chapterHasQuestions = (chapterIndex: number): boolean => {
+    if (!questionMetadata) return true; // Assume available if no metadata
+    return questionMetadata.availableChapters.includes(chapterIndex + 1); // Convert to 1-indexed
+  };
+
+  // Get question count for a chapter
+  const getChapterQuestionCount = (chapterIndex: number): number => {
+    if (!questionMetadata) return 0;
+    return questionMetadata.questionsByChapter[chapterIndex + 1] || 0;
+  };
 
   // Quiz State
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -82,6 +121,9 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
   // Chapter Selection Helpers
   const toggleChapter = (index: number) => {
+    // Only allow toggling chapters that have questions
+    if (!chapterHasQuestions(index)) return;
+    
     setSelectedChapters(prev => 
       prev.includes(index) 
         ? prev.filter(i => i !== index)
@@ -90,6 +132,9 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   };
 
   const handleChapterClick = (index: number, e: React.MouseEvent) => {
+    // Don't allow clicking on chapters without questions
+    if (!chapterHasQuestions(index)) return;
+    
     if (e.shiftKey && lastInteractionIndex !== null) {
       const start = Math.min(lastInteractionIndex, index);
       const end = Math.max(lastInteractionIndex, index);
@@ -116,10 +161,15 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   };
 
   const toggleAllChapters = () => {
-    if (selectedChapters.length === book.chapters.length) {
+    // Only select chapters that have questions
+    const chaptersWithQuestions = book.chapters
+      .map((_, i) => i)
+      .filter(i => chapterHasQuestions(i));
+    
+    if (selectedChapters.length === chaptersWithQuestions.length) {
       setSelectedChapters([]);
     } else {
-      setSelectedChapters(book.chapters.map((_, i) => i));
+      setSelectedChapters(chaptersWithQuestions);
     }
   };
 
@@ -287,7 +337,9 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   };
 
   // Scroll config area if needed
-  const renderConfig = () => (
+  const renderConfig = () => {
+    try {
+      return (
     <div className="w-full max-w-2xl max-h-[90vh] bg-[#3E2723] rounded-2xl shadow-2xl border border-[#A1887F]/30 overflow-hidden relative z-10 animate-slide-up my-auto flex flex-col">
        <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#2a1d18]/50 shrink-0">
           <div className="flex items-center gap-3">
@@ -324,7 +376,12 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                 className={`p-4 rounded-xl border transition-all text-left group ${scope === 'FULL' ? 'bg-brand-orange/20 border-brand-orange text-white' : 'bg-black/20 border-white/5 text-brand-cream/60 hover:bg-white/5'}`}
             >
                 <div className="font-bold text-base leading-tight">Full Book</div>
-                <div className="text-xs opacity-70 mt-1">Review all.</div>
+                <div className="text-xs opacity-70 mt-1">
+                  {questionMetadata 
+                    ? `${questionMetadata.availableChapters.length} chapters · ${questionMetadata.totalQuestions} questions`
+                    : 'Review all.'
+                  }
+                </div>
             </button>
             <button 
                 onClick={() => setScope('CHAPTER')}
@@ -354,37 +411,67 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                  onClick={toggleAllChapters}
                  className="text-[10px] font-bold text-brand-orange hover:text-white transition-colors uppercase"
                >
-                 {selectedChapters.length === book.chapters.length ? 'Deselect All' : 'Select All'}
+                 {selectedChapters.length === (questionMetadata?.availableChapters.length || book.chapters.length) ? 'Deselect All' : 'Select All'}
                </button>
             </div>
             <div className="max-h-40 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-              {book.chapters.map((chap, idx) => {
-                const isSelected = selectedChapters.includes(idx);
-                return (
-                <button
-                  key={idx}
-                  onClick={(e) => handleChapterClick(idx, e)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between group ${
-                    isSelected 
-                      ? 'bg-brand-orange/10 border border-brand-orange/30 text-white' 
-                      : 'text-brand-cream/70 border border-transparent hover:bg-white/5 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 truncate">
-                    <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${isSelected ? 'bg-brand-orange border-brand-orange' : 'border-white/20'}`}>
-                       {isSelected && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                    </div>
-                    <span className="truncate flex-1 text-left">
-                      <span className="font-mono text-xs opacity-50 mr-2">{idx + 1}.</span>
-                      {chap}
-                    </span>
-                  </div>
-                </button>
-              )})}
+              {loadingMetadata ? (
+                <div className="flex items-center justify-center py-4 text-brand-cream/50">
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  <span className="text-xs">Loading chapters...</span>
+                </div>
+              ) : (
+                book.chapters.map((chap, idx) => {
+                  const isSelected = selectedChapters.includes(idx);
+                  const hasQuestions = chapterHasQuestions(idx);
+                  const questionCount = getChapterQuestionCount(idx);
+                  
+                  return (
+                    <button
+                      key={idx}
+                      onClick={(e) => handleChapterClick(idx, e)}
+                      disabled={!hasQuestions}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between group ${
+                        !hasQuestions
+                          ? 'opacity-40 cursor-not-allowed text-brand-cream/40 border border-transparent'
+                          : isSelected 
+                            ? 'bg-brand-orange/10 border border-brand-orange/30 text-white' 
+                            : 'text-brand-cream/70 border border-transparent hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 truncate">
+                        <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${
+                          !hasQuestions
+                            ? 'border-white/10 bg-white/5'
+                            : isSelected 
+                              ? 'bg-brand-orange border-brand-orange' 
+                              : 'border-white/20'
+                        }`}>
+                          {isSelected && hasQuestions && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                        </div>
+                        <span className="truncate flex-1 text-left">
+                          <span className="font-mono text-xs opacity-50 mr-2">{idx + 1}.</span>
+                          {chap}
+                        </span>
+                      </div>
+                      {hasQuestions ? (
+                        <span className="text-[10px] text-brand-cream/40 ml-2 shrink-0">
+                          {questionCount} Q
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-brand-cream/30 ml-2 shrink-0 italic">
+                          No questions
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
             </div>
             <div className="p-2 bg-black/20 text-center border-t border-white/5">
                 <span className="text-[10px] text-brand-cream/40">
-                   {selectedChapters.length} chapters selected
+                   {selectedChapters.length} of {questionMetadata?.availableChapters.length || book.chapters.length} chapters selected
+                   {questionMetadata && ` (${questionMetadata.totalQuestions} questions available)`}
                 </span>
             </div>
           </div>
@@ -488,7 +575,18 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
         )}
        </div>
     </div>
-  );
+      );
+    } catch (error) {
+      console.error('[TestSuite] Error in renderConfig:', error);
+      return (
+        <div className="w-full max-w-md bg-[#3E2723] rounded-2xl shadow-2xl border border-[#A1887F]/30 p-8 text-center">
+          <p className="text-red-400 font-bold">Error rendering config</p>
+          <p className="text-brand-cream/60 text-sm mt-2">{String(error)}</p>
+          <button onClick={onClose} className="mt-4 px-4 py-2 bg-brand-orange rounded-lg text-white">Close</button>
+        </div>
+      );
+    }
+  };
 
   const renderLoading = () => (
     <div className="w-full max-w-md bg-[#3E2723] rounded-2xl shadow-2xl border border-[#A1887F]/30 p-8 relative z-10 animate-slide-up my-auto flex flex-col items-center justify-center">
@@ -870,6 +968,31 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
     );
   }
 
+  if (!book) {
+    console.error('[TestSuite] Book prop is null/undefined');
+    return (
+      <div className="fixed inset-0 z-50 bg-[#1a110e] flex items-center justify-center">
+        <div className="text-white text-center">
+          <p className="text-lg font-bold text-red-400">Error: No book data provided</p>
+          <button onClick={onClose} className="mt-4 px-4 py-2 bg-brand-orange rounded-lg">Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!book.chapters || !Array.isArray(book.chapters)) {
+    console.error('[TestSuite] Book chapters missing or invalid:', book.chapters);
+    return (
+      <div className="fixed inset-0 z-50 bg-[#1a110e] flex items-center justify-center">
+        <div className="text-white text-center">
+          <p className="text-lg font-bold text-red-400">Error: Book chapters data is missing</p>
+          <p className="text-sm text-brand-cream/60 mt-2">Book ID: {book.id || 'N/A'}</p>
+          <button onClick={onClose} className="mt-4 px-4 py-2 bg-brand-orange rounded-lg">Close</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-[#1a110e] flex flex-col animate-fade-in">
        
@@ -922,16 +1045,18 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                   {step === 'QUIZ' && renderQuiz()}
                   {step === 'RESULTS' && renderResults()}
               </div>
+
+              {/* AI Assist Sidebar (Right) - Only during QUIZ */}
+              {step === 'QUIZ' && currentQuestion && (
+                <HintSidebar
+                  isOpen={isAiAssistOpen}
+                  onClose={() => setIsAiAssistOpen(false)}
+                  book={book}
+                  currentQuestion={currentQuestion as Question}
+                />
+              )}
            </>
        )}
-
-      {/* AI Assist Sidebar (Right) */}
-      <HintSidebar
-        isOpen={isAiAssistOpen}
-        onClose={() => setIsAiAssistOpen(false)}
-        book={book}
-        currentQuestion={currentQuestion as Question}
-      />
     </div>
   );
 };
