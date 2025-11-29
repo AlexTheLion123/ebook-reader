@@ -27,14 +27,12 @@ const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, isExpande
 
   const getMasteryColor = (score: number) => {
     if (score >= 80) return 'text-green-400';
-    if (score >= 50) return 'text-brand-orange';
-    return 'text-red-400';
+    return 'text-brand-orange';
   };
   
   const getProgressBarColor = (score: number) => {
     if (score >= 80) return 'bg-green-500';
-    if (score >= 50) return 'bg-brand-orange';
-    return 'bg-red-500';
+    return 'bg-brand-orange';
   };
 
   return (
@@ -71,8 +69,8 @@ const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, isExpande
                   </div>
                   <div className="text-[9px] font-bold text-brand-cream/40 uppercase tracking-widest mt-0.5">Mastery</div>
                 </div>
-                <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center z-10 ${book.overallMastery >= 50 ? 'border-brand-orange' : 'border-red-500/50'}`}>
-                  <TrendingUp className={`w-4 h-4 ${book.overallMastery >= 50 ? 'text-brand-orange' : 'text-red-400'}`} />
+                <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center z-10 ${book.overallMastery >= 80 ? 'border-green-500' : 'border-brand-orange'}`}>
+                  <TrendingUp className={`w-4 h-4 ${book.overallMastery >= 80 ? 'text-green-500' : 'text-brand-orange'}`} />
                 </div>
             </div>
           </div>
@@ -90,8 +88,8 @@ const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, isExpande
                   </div>
                   <div className="text-[9px] font-bold text-brand-cream/40 uppercase tracking-widest mt-0.5">Mastery</div>
                 </div>
-                <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center z-10 ${book.overallMastery >= 50 ? 'border-brand-orange' : 'border-red-500/50'}`}>
-                  <TrendingUp className={`w-4 h-4 ${book.overallMastery >= 50 ? 'text-brand-orange' : 'text-red-400'}`} />
+                <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center z-10 ${book.overallMastery >= 80 ? 'border-green-500' : 'border-brand-orange'}`}>
+                  <TrendingUp className={`w-4 h-4 ${book.overallMastery >= 80 ? 'text-green-500' : 'text-brand-orange'}`} />
                 </div>
                 {/* Mobile Integrated Progress Bar */}
                 <div className="absolute bottom-0 left-0 w-full h-1 bg-white/5">

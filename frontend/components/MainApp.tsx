@@ -248,6 +248,7 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
           // DETAIL VIEW
           <BookDetail 
             book={selectedBook} 
+            progress={progressData.find(p => p.bookTitle === selectedBook.title) || null}
             onBack={handleNavHome} 
             onRead={handleStartReading}
             onTest={() => setCurrentView('TESTING')}
@@ -341,9 +342,18 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
                   ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' 
                   : 'grid-cols-1 gap-3'
               }`}>
-                {books.map((book, idx) => (
-                  <BookCard key={idx} book={book} onClick={handleBookClick} viewMode={viewMode} />
-                ))}
+                {books.map((book, idx) => {
+                  const bookProgress = progressData.find(p => p.bookTitle === book.title);
+                  return (
+                    <BookCard 
+                      key={idx} 
+                      book={book} 
+                      onClick={handleBookClick} 
+                      viewMode={viewMode}
+                      mastery={bookProgress?.overallMastery}
+                    />
+                  );
+                })}
                 {books.length === 0 && hasSearched && (
                    <div className="col-span-full text-center py-20 text-white/60">
                       No books found. Try a different search term.
