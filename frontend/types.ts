@@ -10,6 +10,7 @@ export interface BookDetails extends BookRecommendation {
   longDescription: string;
   chapters: string[];
   id?: string;
+  concepts?: string[]; // Optional array of testable concepts (themes, motifs, symbols, etc.)
 }
 
 export enum SearchStatus {
@@ -76,6 +77,7 @@ export interface Book {
   uploadedAt: number;
   chapters?: string[];
   chapterCount?: number;
+  concepts?: string[];
 }
 
 export interface BookListResponse {

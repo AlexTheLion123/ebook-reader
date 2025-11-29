@@ -58,7 +58,8 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
           description: b.description || 'Uploaded EPUB Textbook',
           rating: 5.0,
           id: id,
-          chapters: chapterTitles
+          chapters: chapterTitles,
+          concepts: b.concepts || []
         } as any;
       });
 
@@ -76,12 +77,14 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     // We just construct a BookDetails object directly.
     const bookId = (book as any).id;
     const chapters = (book as any).chapters || [];
+    const concepts = (book as any).concepts || [];
     
     const details: BookDetails = {
       ...book,
       longDescription: "This is an uploaded textbook.",
       chapters: chapters,
-      id: bookId // Pass the bookId through to BookDetails
+      id: bookId, // Pass the bookId through to BookDetails
+      concepts: concepts
     };
     
     setSelectedBook(details);

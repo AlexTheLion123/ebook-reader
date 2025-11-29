@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag } from 'lucide-react';
 import { BookDetails, Question, QuestionType } from '../types';
 import { HintSidebar } from './HintSidebar';
 
@@ -67,8 +67,10 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   const [step, setStep] = useState<TestStep>('CONFIG');
   
   // Config State
-  const [scope, setScope] = useState<'FULL' | 'CHAPTER'>('FULL');
-  const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
+  const [scope, setScope] = useState<'FULL' | 'CHAPTER' | 'CONCEPTS'>('FULL');
+  const [selectedChapters, setSelectedChapters] = useState<number[]>([]);
+  const [selectedConcepts, setSelectedConcepts] = useState<string[]>([]);
+  const [lastInteractionIndex, setLastInteractionIndex] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<'BASIC' | 'MEDIUM' | 'DEEP' | 'MASTERY'>('MEDIUM');
   const [length, setLength] = useState<5 | 15 | 30>(5);
 
@@ -105,6 +107,67 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   // Derived State
   const currentQuestion = MOCK_QUESTIONS[currentQuestionIndex % MOCK_QUESTIONS.length];
   const progress = ((currentQuestionIndex) / length) * 100;
+
+  // Chapter Selection Helpers
+  const toggleChapter = (index: number) => {
+    setSelectedChapters(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
+  };
+
+  const handleChapterClick = (index: number, e: React.MouseEvent) => {
+    if (e.shiftKey && lastInteractionIndex !== null) {
+      const start = Math.min(lastInteractionIndex, index);
+      const end = Math.max(lastInteractionIndex, index);
+      const range: number[] = [];
+      for (let i = start; i <= end; i++) range.push(i);
+
+      const isAnchorSelected = selectedChapters.includes(lastInteractionIndex);
+
+      setSelectedChapters(prev => {
+        if (isAnchorSelected) {
+          // Select all in range
+          const set = new Set([...prev, ...range]);
+          return Array.from(set).sort((a, b) => a - b);
+        } else {
+          // Deselect all in range
+          return prev.filter(i => !range.includes(i));
+        }
+      });
+      setLastInteractionIndex(index);
+    } else {
+      toggleChapter(index);
+      setLastInteractionIndex(index);
+    }
+  };
+
+  const toggleAllChapters = () => {
+    if (selectedChapters.length === book.chapters.length) {
+      setSelectedChapters([]);
+    } else {
+      setSelectedChapters(book.chapters.map((_, i) => i));
+    }
+  };
+
+  // Concepts Selection Helpers
+  const toggleConcept = (concept: string) => {
+    setSelectedConcepts(prev => 
+      prev.includes(concept) 
+        ? prev.filter(c => c !== concept)
+        : [...prev, concept]
+    );
+  };
+
+  const toggleAllConcepts = () => {
+    if (!book.concepts) return;
+    if (selectedConcepts.length === book.concepts.length) {
+      setSelectedConcepts([]);
+    } else {
+      setSelectedConcepts([...book.concepts]);
+    }
+  };
 
   const handleStart = () => {
     setStep('QUIZ');
@@ -176,13 +239,13 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
             <label className="text-xs font-bold text-brand-orange uppercase tracking-wider flex items-center gap-2">
             <BookOpen className="w-4 h-4" /> Scope
             </label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className={`grid gap-4 ${book.concepts && book.concepts.length > 0 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-2'}`}>
             <button 
                 onClick={() => setScope('FULL')}
                 className={`p-4 rounded-xl border transition-all text-left group ${scope === 'FULL' ? 'bg-brand-orange/20 border-brand-orange text-white' : 'bg-black/20 border-white/5 text-brand-cream/60 hover:bg-white/5'}`}
             >
                 <div className="font-bold text-base leading-tight">Full Book</div>
-                <div className="text-xs opacity-70 mt-1">Comprehensive review.</div>
+                <div className="text-xs opacity-70 mt-1">Review all.</div>
             </button>
             <button 
                 onClick={() => setScope('CHAPTER')}
@@ -191,33 +254,103 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                 <div className="font-bold text-base leading-tight">Chapter Select</div>
                 <div className="text-xs opacity-70 mt-1">Specific sections.</div>
             </button>
+            {book.concepts && book.concepts.length > 0 && (
+              <button 
+                  onClick={() => setScope('CONCEPTS')}
+                  className={`p-4 rounded-xl border transition-all text-left group ${scope === 'CONCEPTS' ? 'bg-brand-orange/20 border-brand-orange text-white' : 'bg-black/20 border-white/5 text-brand-cream/60 hover:bg-white/5'}`}
+              >
+                  <div className="font-bold text-base leading-tight">Concepts</div>
+                  <div className="text-xs opacity-70 mt-1">Themes, motifs...</div>
+              </button>
+            )}
             </div>
         </div>
 
         {/* Chapter Selection */}
         {scope === 'CHAPTER' && (
           <div className="mt-4 bg-black/20 rounded-xl border border-white/5 overflow-hidden animate-fade-in">
-            <div className="p-3 bg-white/5 text-xs font-bold text-brand-cream/60 uppercase tracking-wider">
-              Select Chapter
+            <div className="p-3 bg-white/5 flex justify-between items-center border-b border-white/5">
+               <span className="text-xs font-bold text-brand-cream/60 uppercase tracking-wider">Select Chapters</span>
+               <button 
+                 onClick={toggleAllChapters}
+                 className="text-[10px] font-bold text-brand-orange hover:text-white transition-colors uppercase"
+               >
+                 {selectedChapters.length === book.chapters.length ? 'Deselect All' : 'Select All'}
+               </button>
             </div>
             <div className="max-h-40 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-              {book.chapters.map((chap, idx) => (
+              {book.chapters.map((chap, idx) => {
+                const isSelected = selectedChapters.includes(idx);
+                return (
                 <button
                   key={idx}
-                  onClick={() => setSelectedChapter(chap)}
+                  onClick={(e) => handleChapterClick(idx, e)}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between group ${
-                    selectedChapter === chap 
-                      ? 'bg-brand-orange text-white shadow-md' 
-                      : 'text-brand-cream/70 hover:bg-white/10 hover:text-white'
+                    isSelected 
+                      ? 'bg-brand-orange/10 border border-brand-orange/30 text-white' 
+                      : 'text-brand-cream/70 border border-transparent hover:bg-white/5 hover:text-white'
                   }`}
                 >
                   <div className="flex items-center gap-3 truncate">
-                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${selectedChapter === chap ? 'bg-white/20' : 'bg-white/5'}`}>{idx + 1}</span>
-                    <span className="truncate">{chap}</span>
+                    <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${isSelected ? 'bg-brand-orange border-brand-orange' : 'border-white/20'}`}>
+                       {isSelected && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                    <span className="truncate flex-1 text-left">
+                      <span className="font-mono text-xs opacity-50 mr-2">{idx + 1}.</span>
+                      {chap}
+                    </span>
                   </div>
-                  {selectedChapter === chap && <CheckCircle className="w-4 h-4 shrink-0" />}
                 </button>
-              ))}
+              )})}
+            </div>
+            <div className="p-2 bg-black/20 text-center border-t border-white/5">
+                <span className="text-[10px] text-brand-cream/40">
+                   {selectedChapters.length} chapters selected
+                </span>
+            </div>
+          </div>
+        )}
+
+        {/* Concepts Selection */}
+        {scope === 'CONCEPTS' && book.concepts && book.concepts.length > 0 && (
+          <div className="mt-4 bg-black/20 rounded-xl border border-white/5 overflow-hidden animate-fade-in">
+            <div className="p-3 bg-white/5 flex justify-between items-center border-b border-white/5">
+               <span className="text-xs font-bold text-brand-cream/60 uppercase tracking-wider">Select Concepts</span>
+               <button 
+                 onClick={toggleAllConcepts}
+                 className="text-[10px] font-bold text-brand-orange hover:text-white transition-colors uppercase"
+               >
+                 {selectedConcepts.length === book.concepts.length ? 'Deselect All' : 'Select All'}
+               </button>
+            </div>
+            <div className="max-h-48 overflow-y-auto p-3 custom-scrollbar">
+              <div className="grid grid-cols-2 gap-2">
+                {book.concepts.map((concept) => {
+                  const isSelected = selectedConcepts.includes(concept);
+                  return (
+                  <button
+                    key={concept}
+                    onClick={() => toggleConcept(concept)}
+                    className={`px-3 py-2.5 rounded-lg text-sm transition-all flex items-center gap-2.5 ${
+                      isSelected 
+                        ? 'bg-brand-orange/10 border border-brand-orange/30 text-white' 
+                        : 'text-brand-cream/70 border border-transparent hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                      isSelected ? 'bg-brand-orange border-brand-orange' : 'border-white/20'
+                    }`}>
+                       {isSelected && <Tag className="w-3 h-3 text-white" />}
+                    </div>
+                    <span className="truncate text-left">{concept}</span>
+                  </button>
+                )})}
+              </div>
+            </div>
+            <div className="p-2 bg-black/20 text-center border-t border-white/5">
+                <span className="text-[10px] text-brand-cream/40">
+                   {selectedConcepts.length} concepts selected
+                </span>
             </div>
           </div>
         )}
@@ -260,12 +393,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
         <button 
             onClick={handleStart}
-            disabled={scope === 'CHAPTER' && !selectedChapter}
-            className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
-              scope === 'CHAPTER' && !selectedChapter
-                ? 'bg-white/10 text-white/30 cursor-not-allowed'
-                : 'bg-brand-orange hover:bg-brand-darkOrange text-white shadow-brand-orange/20 hover:scale-[1.02]'
-            }`}
+            className="w-full bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
         >
             <GraduationCap className="w-5 h-5" />
             Start Assessment
