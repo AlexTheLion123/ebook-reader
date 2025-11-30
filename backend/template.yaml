@@ -196,10 +196,8 @@ Resources:
         - COGNITO
         - Google
       CallbackURLs:
-        - http://localhost:3000
-        - http://localhost:3000/
-        - https://main.d12hmt15z4iuqe.amplifyapp.com
-        - https://main.d12hmt15z4iuqe.amplifyapp.com/
+        - http://localhost:3000/app
+        - https://main.d12hmt15z4iuqe.amplifyapp.com/app
       LogoutURLs:
         - http://localhost:3000
         - https://main.d12hmt15z4iuqe.amplifyapp.com
@@ -234,10 +232,8 @@ Resources:
       SupportedIdentityProviders:
         - COGNITO
       CallbackURLs:
-        - http://localhost:3000
-        - http://localhost:3000/
-        - https://main.d12hmt15z4iuqe.amplifyapp.com
-        - https://main.d12hmt15z4iuqe.amplifyapp.com/
+        - http://localhost:3000/app
+        - https://main.d12hmt15z4iuqe.amplifyapp.com/app
       LogoutURLs:
         - http://localhost:3000
         - https://main.d12hmt15z4iuqe.amplifyapp.com

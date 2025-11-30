@@ -3,12 +3,12 @@
 
 import type { ResourcesConfig } from 'aws-amplify';
 
-// Auto-detect the current origin for redirects
-const getCurrentOrigin = () => {
+// Auto-detect the current origin for redirects, always redirect to /app
+const getRedirectUrl = () => {
   if (typeof window !== 'undefined') {
-    return window.location.origin;
+    return `${window.location.origin}/app`;
   }
-  return 'http://localhost:3000';
+  return 'http://localhost:3000/app';
 };
 
 export const authConfig: ResourcesConfig = {
@@ -21,10 +21,10 @@ export const authConfig: ResourcesConfig = {
           domain: import.meta.env.VITE_COGNITO_DOMAIN || '',
           scopes: ['email', 'openid', 'profile'],
           redirectSignIn: [
-            import.meta.env.VITE_REDIRECT_SIGN_IN || getCurrentOrigin()
+            import.meta.env.VITE_REDIRECT_SIGN_IN || getRedirectUrl()
           ],
           redirectSignOut: [
-            import.meta.env.VITE_REDIRECT_SIGN_OUT || getCurrentOrigin()
+            import.meta.env.VITE_REDIRECT_SIGN_OUT || getRedirectUrl()
           ],
           responseType: 'code',
           providers: ['Google'],
