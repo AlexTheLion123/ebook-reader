@@ -8,7 +8,7 @@ const getCurrentOrigin = () => {
   if (typeof window !== 'undefined') {
     return window.location.origin;
   }
-  return 'http://localhost:5173';
+  return 'http://localhost:3000';
 };
 
 export const authConfig: ResourcesConfig = {
