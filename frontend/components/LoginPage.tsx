@@ -6,6 +6,8 @@ type AuthMode = 'signup' | 'signin' | 'confirm';
 
 interface LoginPageProps {
   onCancel?: () => void;
+  onSuccess?: () => void;
+  initialMode?: 'signin' | 'signup';
 }
 
 // Google G Logo component with proper colors
@@ -30,10 +32,10 @@ const GoogleLogo = () => (
   </svg>
 );
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onCancel }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onCancel, onSuccess, initialMode = 'signup' }) => {
   const { signInWithEmail, signUpWithEmail, confirmSignUpCode, signInWithGoogle, isLoading, isConfigured } = useAuth();
   
-  const [mode, setMode] = useState<AuthMode>('signup');
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -50,6 +52,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onCancel }) => {
     
     try {
       await signInWithEmail(email, password);
+      // Navigate back to app on success
+      onSuccess?.();
     } catch (err: any) {
       setError(err.message || 'Failed to sign in. Please check your credentials.');
     } finally {

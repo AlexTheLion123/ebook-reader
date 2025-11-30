@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, Bell, BookOpen, LayoutGrid, List } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { listBooks } from '../services/backendService';
 import { BookRecommendation, BookDetails, BookProgress } from '../types';
 import { BookCard } from './BookCard';
@@ -9,30 +10,58 @@ import { TestSuite } from './TestSuite';
 import { Dashboard } from './Dashboard';
 import { UserMenu } from './UserMenu';
 import { useAuth } from './AuthProvider';
-import { useAppNavigation } from '../App';
 
 interface MainAppProps {
-  initialQuery: string;
+  initialQuery?: string;
+  initialBookId?: string;
+  initialChapter?: number;
+  onRequestLogin?: () => void;
 }
 
 type AppView = 'HOME' | 'DETAILS' | 'READING' | 'TESTING' | 'DASHBOARD';
 
-export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
+export const MainApp: React.FC<MainAppProps> = ({ 
+  initialQuery = '', 
+  initialBookId,
+  initialChapter,
+  onRequestLogin 
+}) => {
   const { user, isAuthenticated } = useAuth();
-  const { requestLogin } = useAppNavigation();
+  const navigate = useNavigate();
+  
+  const handleRequestLogin = () => {
+    if (onRequestLogin) {
+      onRequestLogin();
+    } else {
+      navigate('/login');
+    }
+  };
+  
   const [query, setQuery] = useState(initialQuery);
   const [books, setBooks] = useState<BookRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [currentView, setCurrentView] = useState<AppView>('HOME');
+  
+  // Initialize view based on URL params to avoid wrong loading state
+  const getInitialView = (): AppView => {
+    if (initialChapter !== undefined) return 'READING';
+    if (initialBookId) return 'DETAILS';
+    return 'HOME';
+  };
+  const [currentView, setCurrentView] = useState<AppView>(getInitialView);
   
   // Detail View State
   const [selectedBook, setSelectedBook] = useState<BookDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  // Reader State
-  const [readingChapterIndex, setReadingChapterIndex] = useState(0);
+  // Reader State - initialize from URL if present
+  const [readingChapterIndex, setReadingChapterIndex] = useState(
+    initialChapter !== undefined ? initialChapter - 1 : 0
+  );
+  
+  // Track if this is the initial mount to avoid spurious URL updates
+  const isInitialMount = useRef(true);
 
   // Mock progress data for dashboard (will be replaced with real data later)
   const [progressData] = useState<BookProgress[]>([
@@ -82,11 +111,13 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     },
   ]);
 
-  const fetchBooks = async (searchQuery?: string) => {
+  const fetchBooks = async (searchQuery?: string, preserveView = false) => {
     setLoading(true);
-    // Reset detail view when fetching books
-    setSelectedBook(null);
-    setCurrentView('HOME');
+    // Reset detail view when fetching books (unless preserving view for deep link)
+    if (!preserveView) {
+      setSelectedBook(null);
+      setCurrentView('HOME');
+    }
     
     try {
       const backendBooks = await listBooks();
@@ -124,7 +155,7 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     }
   };
 
-  const handleBookClick = async (book: BookRecommendation) => {
+  const handleBookClick = async (book: BookRecommendation, skipNavigation = false) => {
     // For uploaded books, we don't need to fetch details from Gemini.
     // We just construct a BookDetails object directly.
     const bookId = (book as any).id;
@@ -141,30 +172,81 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     
     setSelectedBook(details);
     setCurrentView('DETAILS');
+    // Update URL to reflect book view (only if not from deep link)
+    if (!skipNavigation) {
+      navigate(`/book/${bookId}`, { replace: true });
+    }
   };
 
   const handleStartReading = (chapterIndex: number) => {
+    // When user explicitly starts reading, we want URL updates from chapter changes
+    isInitialMount.current = false;
     setReadingChapterIndex(chapterIndex);
     setCurrentView('READING');
+    // Update URL to reflect chapter view
+    if (selectedBook?.id) {
+      navigate(`/book/${selectedBook.id}/chapter/${chapterIndex + 1}`, { replace: true });
+    }
   };
 
   const handleCloseReader = () => {
     setCurrentView('DETAILS');
     // Keep selectedBook so we go back to book details, not the main list
+    if (selectedBook?.id) {
+      navigate(`/book/${selectedBook.id}`, { replace: true });
+    }
   };
 
   const handleNavHome = () => {
     setSelectedBook(null);
     setCurrentView('HOME');
+    navigate('/app', { replace: true });
   };
 
   const handleNavDashboard = () => {
     setCurrentView('DASHBOARD');
+    navigate('/app?view=dashboard', { replace: true });
   };
 
+  // Fetch books on mount
   useEffect(() => {
-    fetchBooks();
+    // Preserve view if this is a deep link (initialBookId means we're loading a specific book/chapter)
+    fetchBooks(undefined, !!initialBookId);
   }, []);
+
+  // Handle URL params for deep linking
+  useEffect(() => {
+    if (initialBookId && books.length > 0 && !selectedBook) {
+      const book = books.find(b => b.id === initialBookId);
+      if (book) {
+        // For deep linking to a chapter, we need to load book details but NOT change view to DETAILS
+        // The view should stay as READING (set by getInitialView)
+        const isChapterDeepLink = initialChapter !== undefined;
+        
+        // Load book details without changing view
+        const bookId = (book as any).id;
+        const chapters = (book as any).chapters || [];
+        const concepts = (book as any).concepts || [];
+        
+        const details: BookDetails = {
+          ...book,
+          longDescription: "This is an uploaded textbook.",
+          chapters: chapters,
+          id: bookId,
+          concepts: concepts
+        };
+        
+        setSelectedBook(details);
+        
+        // Only set view to DETAILS if NOT a chapter deep link
+        if (!isChapterDeepLink) {
+          setCurrentView('DETAILS');
+        }
+        // If it IS a chapter deep link, the view is already READING from getInitialView
+        // Just ensure the chapter index is set (already initialized in useState)
+      }
+    }
+  }, [initialBookId, initialChapter, books.length]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,15 +266,41 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
     );
   }
 
+  // Handle chapter change from ReaderView (update URL)
+  const handleChapterChange = useCallback((chapterIndex: number) => {
+    // Skip URL update on initial mount (when loading from deep link)
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    setReadingChapterIndex(chapterIndex);
+    if (selectedBook?.id) {
+      navigate(`/book/${selectedBook.id}/chapter/${chapterIndex + 1}`, { replace: true });
+    }
+  }, [selectedBook?.id, navigate]);
+
   // Render Reader View Overlay (Hides Navbar)
-  if (currentView === 'READING' && selectedBook) {
-    return (
-      <ReaderView 
-        book={selectedBook} 
-        initialChapterIndex={readingChapterIndex} 
-        onClose={handleCloseReader} 
-      />
-    );
+  if (currentView === 'READING') {
+    if (selectedBook) {
+      return (
+        <ReaderView 
+          book={selectedBook} 
+          initialChapterIndex={readingChapterIndex} 
+          onClose={handleCloseReader}
+          onChapterChange={handleChapterChange}
+        />
+      );
+    } else {
+      // Deep link loading state - book not loaded yet
+      return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#3E2723]">
+          <Loader2 className="w-16 h-16 text-brand-orange animate-spin mb-6" />
+          <h2 className="text-2xl font-bold text-white">Loading Chapter...</h2>
+          <p className="text-brand-cream/70 mt-2">Please wait while we fetch the book</p>
+        </div>
+      );
+    }
   }
 
   // Render Test Suite Overlay (Hides Navbar)
@@ -231,7 +339,7 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
           {isAuthenticated ? (
             <UserMenu />
           ) : (
-            <button className="flex items-center gap-2 bg-white/10 hover:bg-white/20 pl-2 pr-4 py-1.5 rounded-full transition-colors border border-white/10" onClick={requestLogin}>
+            <button className="flex items-center gap-2 bg-white/10 hover:bg-white/20 pl-2 pr-4 py-1.5 rounded-full transition-colors border border-white/10" onClick={handleRequestLogin}>
               <div className="w-8 h-8 bg-gradient-to-br from-brand-orange to-brand-darkOrange rounded-full flex items-center justify-center text-white font-bold text-sm shadow-inner">
                 ?
               </div>
@@ -262,6 +370,12 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
             onRead={handleStartReading}
             onTest={() => setCurrentView('TESTING')}
           />
+        ) : currentView === 'DETAILS' && !selectedBook ? (
+          // DETAILS deep link loading state
+          <div className="flex flex-col items-center justify-center py-20">
+            <Loader2 className="w-16 h-16 text-brand-orange animate-spin mb-6" />
+            <h2 className="text-2xl font-bold text-white">Loading Book...</h2>
+          </div>
         ) : (
           // LIST VIEW (HOME)
           <>

@@ -8,9 +8,10 @@ interface ReaderViewProps {
   book: BookDetails;
   initialChapterIndex: number;
   onClose: () => void;
+  onChapterChange?: (chapterIndex: number) => void;
 }
 
-export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterIndex, onClose }) => {
+export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterIndex, onClose, onChapterChange }) => {
   // Content State
   const [currentChapterIndex, setCurrentChapterIndex] = useState(initialChapterIndex);
   const [content, setContent] = useState('');
@@ -82,6 +83,11 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
     };
     fetchContent();
   }, [book, currentChapterIndex]);
+
+  // Notify parent when chapter changes (for URL updates)
+  useEffect(() => {
+    onChapterChange?.(currentChapterIndex);
+  }, [currentChapterIndex, onChapterChange]);
 
 
   // --- Navigation Handlers ---
