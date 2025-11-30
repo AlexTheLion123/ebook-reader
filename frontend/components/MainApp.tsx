@@ -12,6 +12,7 @@ import { TestSuite } from './TestSuite';
 import { Dashboard } from './Dashboard';
 import { UserMenu } from './UserMenu';
 import { useAuth } from './AuthProvider';
+import { useToast, ToastContainer } from './Toast';
 
 interface MainAppProps {
   initialQuery?: string;
@@ -32,6 +33,7 @@ export const MainApp: React.FC<MainAppProps> = ({
 }) => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const { toasts, removeToast, showSuccess, showError } = useToast();
   
   const handleRequestLogin = () => {
     if (onRequestLogin) {
@@ -70,12 +72,13 @@ export const MainApp: React.FC<MainAppProps> = ({
 
   // Progress data for dashboard - fetched from SRS API for ACTIVE books only
   const [progressData, setProgressData] = useState<BookProgress[]>([]);
-  const [loadingProgress, setLoadingProgress] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(true); // Start true to show loading immediately
 
   // Fetch progress data only for books in user's Active Courses
   const fetchProgressData = useCallback(async (bookList: BookRecommendation[]) => {
     if (!isAuthenticated || bookList.length === 0) {
       setProgressData([]);
+      setLoadingProgress(false);
       return;
     }
 
@@ -104,7 +107,7 @@ export const MainApp: React.FC<MainAppProps> = ({
             totalChapters: stats.chapters.length,
             lastTestedDate: new Date().toISOString().split('T')[0], // TODO: track this in backend
             weakAreas: [], // Could be derived from low-scoring concepts
-            concepts: stats.concepts.map(c => ({ name: c.name, score: c.score })),
+            concepts: [], // TODO: fetch concept stats from backend when available
             chapterBreakdown: stats.chapters.map(c => ({
               chapterIndex: c.chapterNumber - 1, // Convert to 0-indexed
               status: c.status === 'mastered' ? 'MASTERED' as const 
@@ -117,15 +120,17 @@ export const MainApp: React.FC<MainAppProps> = ({
         } catch (error) {
           console.debug(`Could not fetch progress for ${book.title}:`, error);
           // Create empty progress entry for this active book
+          // Note: book.chapters may exist at runtime (added in fetchBooks) but isn't in BookRecommendation type
+          const chapters = (book as any).chapters || [];
           progressResults.push({
             bookTitle: book.title,
             overallMastery: 0,
             chaptersMastered: 0,
-            totalChapters: book.chapters?.length || 0,
+            totalChapters: chapters.length,
             lastTestedDate: '',
             weakAreas: [],
             concepts: [],
-            chapterBreakdown: (book.chapters || []).map((_, idx) => ({
+            chapterBreakdown: chapters.map((_: any, idx: number) => ({
               chapterIndex: idx,
               status: 'UNTOUCHED' as const,
               score: 0,
@@ -382,6 +387,7 @@ export const MainApp: React.FC<MainAppProps> = ({
         {currentView === 'DASHBOARD' ? (
           <Dashboard 
             progressData={progressData}
+            loading={loadingProgress}
             onBack={handleNavHome}
             onContinue={(bookTitle) => {
               setQuery(bookTitle);
@@ -398,6 +404,8 @@ export const MainApp: React.FC<MainAppProps> = ({
             onBack={handleNavHome} 
             onRead={handleStartReading}
             onTest={() => setCurrentView('TESTING')}
+            showSuccess={showSuccess}
+            showError={showError}
           />
         ) : currentView === 'DETAILS' && !selectedBook ? (
           // DETAILS deep link loading state
@@ -516,6 +524,9 @@ export const MainApp: React.FC<MainAppProps> = ({
           </>
         )}
       </main>
+      
+      {/* Toast container - persists across view changes */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 };

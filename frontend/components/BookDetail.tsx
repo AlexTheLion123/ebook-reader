@@ -2,7 +2,6 @@ import React, { useState, useCallback } from 'react';
 import { ArrowLeft, Star, BookOpen, ChevronDown, ChevronUp, List, PlayCircle, BrainCircuit, BarChart2, RefreshCw, Zap, TrendingUp, Activity, Loader2 } from 'lucide-react';
 import { BookDetails, BookProgress } from '../types';
 import { isBookActive, addActiveBook, removeActiveBook } from '../services/userActiveBooksService';
-import { useToast, ToastContainer } from './Toast';
 
 interface BookDetailProps {
   book: BookDetails;
@@ -10,17 +9,19 @@ interface BookDetailProps {
   onBack: () => void;
   onRead: (chapterIndex: number) => void;
   onTest: () => void;
+  showSuccess?: (message: string, options?: { undoAction?: () => void; undoLabel?: string; duration?: number }) => string;
+  showError?: (message: string, duration?: number) => string;
 }
 
-export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, onRead, onTest }) => {
+export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, onRead, onTest, showSuccess, showError }) => {
   const [isChaptersOpen, setIsChaptersOpen] = useState(true);
   const [isProgressExpanded, setIsProgressExpanded] = useState(false);
   const [isAddingBook, setIsAddingBook] = useState(false);
-  
-  const { toasts, removeToast, showSuccess, showError } = useToast();
 
   // Handle Test Yourself click with auto-add to active courses
   const handleTestClick = useCallback(async () => {
+    console.log('[BookDetail] handleTestClick called, book.id:', book.id);
+    
     if (!book.id) {
       onTest();
       return;
@@ -31,6 +32,7 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, 
     try {
       // Check if book is already in active courses
       const alreadyActive = await isBookActive(book.id);
+      console.log('[BookDetail] alreadyActive:', alreadyActive);
 
       if (alreadyActive) {
         // Already active, just start the quiz
@@ -39,28 +41,35 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, 
         // First time - add to active courses
         try {
           await addActiveBook(book.id, book.title);
+          console.log('[BookDetail] Book added to active courses, showing toast...');
           
-          // Show success toast with undo option
-          showSuccess(
-            `Added ${book.title} to your Active Courses`,
-            {
-              undoAction: async () => {
-                try {
-                  await removeActiveBook(book.id!);
-                } catch (undoError) {
-                  showError('Undo failed');
-                }
-              },
-              undoLabel: '↩ Undo',
-              duration: 8000,
-            }
-          );
+          // Show success toast with undo option (if showSuccess is provided)
+          if (showSuccess) {
+            showSuccess(
+              `Added "${book.title}" to Active Courses`,
+              {
+                undoAction: async () => {
+                  try {
+                    await removeActiveBook(book.id!);
+                    console.log('[BookDetail] Undo successful');
+                  } catch (undoError) {
+                    console.error('[BookDetail] Undo failed:', undoError);
+                    showError?.('Undo failed');
+                  }
+                },
+                undoLabel: 'Undo',
+                duration: 8000,
+              }
+            );
+            console.log('[BookDetail] Toast shown, now calling onTest()');
+          }
 
           // Start the quiz immediately
           onTest();
         } catch (addError) {
+          console.error('[BookDetail] Failed to add book:', addError);
           // POST failed - show error toast, don't start quiz
-          showError("Couldn't add book — try again");
+          showError?.("Couldn't add book — try again");
           setIsAddingBook(false);
           return;
         }
@@ -381,9 +390,6 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, 
 
         </div>
       </div>
-
-      {/* Toast Container */}
-      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 };

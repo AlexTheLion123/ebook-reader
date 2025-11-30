@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { X, Check, AlertCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Check, AlertCircle, RotateCcw } from 'lucide-react';
 
 export interface ToastProps {
   id: string;
@@ -57,8 +58,8 @@ const ToastItem: React.FC<ToastProps> = ({
   return (
     <div
       className={`
-        flex items-center gap-3 px-4 py-3 rounded-lg shadow-2xl min-w-[320px] max-w-[420px]
-        transition-all duration-300 ease-out
+        flex items-center gap-4 px-5 py-3 rounded-lg shadow-2xl min-w-[300px] max-w-[90vw]
+        transition-all duration-300 ease-out backdrop-blur-sm
         ${isVisible && !isExiting 
           ? 'translate-y-0 opacity-100' 
           : 'translate-y-4 opacity-0'
@@ -67,13 +68,12 @@ const ToastItem: React.FC<ToastProps> = ({
       style={{
         background: 'rgba(30, 30, 30, 0.95)',
         border: '1px solid #444',
-        backdropFilter: 'blur(8px)',
       }}
     >
       {/* Icon */}
       {type === 'success' ? (
-        <div className="shrink-0 w-5 h-5 rounded-full bg-brand-orange/20 flex items-center justify-center">
-          <Check className="w-3.5 h-3.5 text-brand-orange" strokeWidth={3} />
+        <div className="shrink-0 bg-brand-orange/20 p-1 rounded-full">
+          <Check className="w-4 h-4 text-brand-orange" strokeWidth={3} />
         </div>
       ) : (
         <div className="shrink-0">
@@ -82,31 +82,31 @@ const ToastItem: React.FC<ToastProps> = ({
       )}
 
       {/* Message */}
-      <span 
-        className="flex-1 text-white text-[15px] font-medium leading-snug"
-      >
+      <span className="flex-1 text-white text-[15px] font-medium truncate">
         {message}
       </span>
 
-      {/* Undo Button (only for success with undo action) */}
+      {/* Divider + Undo Button (only for success with undo action) */}
       {type === 'success' && undoAction && (
-        <button
-          onClick={handleUndo}
-          className="shrink-0 text-brand-orange text-[15px] font-medium hover:underline transition-all"
-        >
-          {undoLabel}
-        </button>
+        <>
+          <div className="w-px h-4 bg-white/10 mx-1 shrink-0"></div>
+          <button
+            onClick={handleUndo}
+            className="flex items-center gap-1.5 text-brand-orange text-[15px] font-medium hover:underline whitespace-nowrap shrink-0 group"
+          >
+            <RotateCcw className="w-3.5 h-3.5 transition-transform group-hover:-rotate-180" />
+            Undo
+          </button>
+        </>
       )}
 
-      {/* Close Button (for errors or when no undo) */}
-      {(type === 'error' || !undoAction) && (
-        <button
-          onClick={handleDismiss}
-          className="shrink-0 p-1 text-white/50 hover:text-white transition-colors rounded"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
+      {/* Close Button - always visible */}
+      <button
+        onClick={handleDismiss}
+        className="ml-2 text-white/40 hover:text-white shrink-0"
+      >
+        <X className="w-4 h-4" />
+      </button>
     </div>
   );
 };
@@ -129,8 +129,9 @@ interface ToastContainerProps {
 export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismiss }) => {
   if (toasts.length === 0) return null;
 
-  return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 items-center">
+  // Use portal to render toast at document.body level, ensuring it's always on top
+  return createPortal(
+    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 items-center pointer-events-auto">
       {toasts.map((toast) => (
         <ToastItem
           key={toast.id}
@@ -143,7 +144,8 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismis
           undoLabel={toast.undoLabel}
         />
       ))}
-    </div>
+    </div>,
+    document.body
   );
 };
 

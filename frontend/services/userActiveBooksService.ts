@@ -213,9 +213,6 @@ export const addActiveBook = async (bookId: string, bookTitle: string): Promise<
 
     const data = await response.json();
     
-    // Also update localStorage for offline access
-    await addLocalActiveBook(bookId, bookTitle);
-    
     return !data.alreadyExists;
   } catch (error) {
     console.error('Error adding active book:', error);
@@ -247,9 +244,6 @@ export const removeActiveBook = async (bookId: string): Promise<boolean> => {
     if (!response.ok) {
       throw new Error(`Failed to remove active book: ${response.statusText}`);
     }
-
-    // Also update localStorage
-    await removeLocalActiveBook(bookId);
     
     return true;
   } catch (error) {

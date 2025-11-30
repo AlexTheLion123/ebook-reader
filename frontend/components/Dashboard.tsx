@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trophy, Flame, Target, BookOpen, TrendingUp, BrainCircuit, List, Zap, RefreshCw, ChevronUp, ChevronDown, ChevronsDown, ChevronsUp } from 'lucide-react';
+import { ArrowLeft, Trophy, Flame, Target, BookOpen, TrendingUp, BrainCircuit, List, Zap, RefreshCw, ChevronUp, ChevronDown, ChevronsDown, ChevronsUp, Loader2 } from 'lucide-react';
 import { BookProgress } from '../types';
 
 interface DashboardProps {
   progressData: BookProgress[];
+  loading?: boolean;
   onBack: () => void;
   onContinue: (bookTitle: string) => void;
 }
@@ -183,7 +184,32 @@ const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, isExpande
   );
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ progressData, onBack, onContinue }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ progressData, loading, onBack, onContinue }) => {
+  // Show loading state while fetching active books
+  if (loading) {
+    return (
+      <div className="animate-fade-in max-w-6xl mx-auto pb-20">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <button 
+            onClick={onBack}
+            className="flex items-center text-brand-cream/80 hover:text-brand-orange transition-colors font-medium group"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
+            Back to Library
+          </button>
+          <h1 className="text-2xl font-bold text-white hidden md:block">My Learning Dashboard</h1>
+        </div>
+
+        {/* Loading State */}
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="w-12 h-12 text-brand-orange animate-spin mb-4" />
+          <p className="text-brand-cream/60 text-lg">Loading your courses...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Calculate aggregate stats
   const totalBooks = progressData.length;
   const averageMastery = Math.round(progressData.reduce((acc, curr) => acc + curr.overallMastery, 0) / (totalBooks || 1));
