@@ -95,6 +95,24 @@ function AppPage() {
   );
 }
 
+// Dashboard page - dedicated route for study dashboard
+function DashboardPage() {
+  const navigate = useNavigate();
+
+  const handleRequestLogin = () => {
+    navigate('/login');
+  };
+
+  return (
+    <AppBackground isLanding={false}>
+      <MainApp 
+        initialView="dashboard"
+        onRequestLogin={handleRequestLogin}
+      />
+    </AppBackground>
+  );
+}
+
 // Auth pages wrapper
 function AuthPage({ mode }: { mode: 'signin' | 'signup' }) {
   const navigate = useNavigate();
@@ -152,6 +170,7 @@ function AppRoutes() {
       
       {/* Main app routes */}
       <Route path="/app" element={<AppPage />} />
+      <Route path="/dashboard" element={<DashboardPage />} />
       <Route path="/book/:bookId" element={<AppPage />} />
       <Route path="/book/:bookId/chapter/:chapterNumber" element={<AppPage />} />
       

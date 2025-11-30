@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag, Lightbulb, Loader2 } from 'lucide-react';
-import { BookDetails, Question, QuestionType, AssessmentQuestion, QuestionHint } from '../types';
+import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag, Lightbulb, Loader2, RotateCcw, ThumbsDown, ThumbsUp, Zap } from 'lucide-react';
+import { BookDetails, Question, QuestionType, AssessmentQuestion, QuestionHint, SrsRating, TestMode, AssessmentQuestionWithSrs } from '../types';
 import { HintSidebar } from './HintSidebar';
 import { fetchQuestions, evaluateAnswer, fetchQuestionMetadata, QuestionMetadataResponse } from '../services/backendService';
+import { fetchSrsBatch, submitSrsAnswer, RATING_CONFIG } from '../services/srsService';
 
 interface TestSuiteProps {
   book: BookDetails;
@@ -23,9 +24,17 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   const [testMode, setTestMode] = useState<'QUICK' | 'STANDARD' | 'THOROUGH'>('QUICK');
 
   // Questions State (fetched from API)
-  const [questions, setQuestions] = useState<AssessmentQuestion[]>([]);
+  const [questions, setQuestions] = useState<AssessmentQuestionWithSrs[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // SRS State
+  const [useSrs, setUseSrs] = useState(true); // Toggle between SRS and legacy mode
+  const [srsDueCount, setSrsDueCount] = useState(0);
+  const [srsNewCount, setSrsNewCount] = useState(0);
+  const [selectedRating, setSelectedRating] = useState<SrsRating | null>(null);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [allCaughtUp, setAllCaughtUp] = useState(false);
 
   // Question Metadata State (which chapters have questions)
   const [questionMetadata, setQuestionMetadata] = useState<QuestionMetadataResponse | null>(null);
@@ -191,7 +200,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
     }
   };
 
-  // Fetch questions from API
+  // Fetch questions from API (SRS or legacy mode)
   const loadQuestions = async () => {
     if (!book.id) {
       setLoadError('Book ID not available');
@@ -200,6 +209,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
     setLoadingQuestions(true);
     setLoadError(null);
+    setAllCaughtUp(false);
 
     try {
       // Build chapter filter based on scope
@@ -209,23 +219,62 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
         chapters = selectedChapters.map(i => i + 1);
       }
 
-      const response = await fetchQuestions({
-        bookId: book.id,
-        chapters,
-        difficulty: [difficulty.toLowerCase() as 'basic' | 'medium' | 'deep' | 'mastery'],
-        limit: currentModeConfig.targetQuestions,
-        shuffle: true,
-      });
+      if (useSrs) {
+        // Use SRS-based fetching
+        // Map UI scope values to API scope values
+        const apiScope = scope === 'FULL' ? 'full' : scope === 'CHAPTER' ? 'chapters' : 'concepts';
+        
+        const response = await fetchSrsBatch({
+          bookId: book.id,
+          mode: testMode === 'QUICK' ? 'Quick' : testMode === 'STANDARD' ? 'Standard' : 'Thorough',
+          scope: apiScope,
+          chapters,
+          concepts: scope === 'CONCEPTS' ? selectedConcepts : undefined,
+          difficulty: [difficulty.toLowerCase() as 'basic' | 'medium' | 'deep' | 'mastery'],
+        });
 
-      if (response.questions.length === 0) {
-        setLoadError('No questions found for the selected criteria. Try selecting different chapters or difficulty.');
+        // Check if all caught up (no questions to review)
+        if (response.questions.length === 0) {
+          if (testMode === 'QUICK') {
+            // Quick mode: no due cards = all caught up!
+            setAllCaughtUp(true);
+            setLoadingQuestions(false);
+            setStep('QUIZ'); // Show the "all caught up" message
+            return;
+          } else {
+            setLoadError('No questions available for the selected criteria. Try a different chapter or difficulty.');
+            setLoadingQuestions(false);
+            return;
+          }
+        }
+
+        // Map SRS response to our question format
+        setQuestions(response.questions);
+        setSrsDueCount(response.metadata.totalDueToday);
+        setSrsNewCount(response.metadata.newToday);
         setLoadingQuestions(false);
-        return;
-      }
+        setStep('QUIZ');
+      } else {
+        // Legacy mode (non-SRS)
+        const response = await fetchQuestions({
+          bookId: book.id,
+          chapters,
+          difficulty: [difficulty.toLowerCase() as 'basic' | 'medium' | 'deep' | 'mastery'],
+          limit: currentModeConfig.targetQuestions,
+          shuffle: true,
+        });
 
-      setQuestions(response.questions);
-      setLoadingQuestions(false);
-      setStep('QUIZ');
+        if (response.questions.length === 0) {
+          setLoadError('No questions found for the selected criteria. Try selecting different chapters or difficulty.');
+          setLoadingQuestions(false);
+          return;
+        }
+
+        // Convert to SRS format (without SRS data)
+        setQuestions(response.questions.map(q => ({ ...q } as AssessmentQuestionWithSrs)));
+        setLoadingQuestions(false);
+        setStep('QUIZ');
+      }
     } catch (error) {
       console.error('Failed to load questions:', error);
       setLoadError('Failed to load questions. Please try again.');
@@ -244,6 +293,11 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
     setElapsedTime(0);
     setRevealedHintIndex(-1);
     setCurrentFeedback(null);
+    setSelectedRating(null);
+    setIsSubmittingRating(false);
+    setAllCaughtUp(false);
+    setSrsDueCount(0);
+    setSrsNewCount(0);
     
     // Start loading questions
     setStep('LOADING');
@@ -323,7 +377,36 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
     }
   };
 
-  const handleNext = () => {
+  // Handle SRS rating submission
+  const handleRatingSelect = async (rating: SrsRating) => {
+    if (!currentQuestion || !useSrs) return;
+    
+    setSelectedRating(rating);
+    setIsSubmittingRating(true);
+
+    try {
+      const userAnswer = currentQuestion.type === 'MCQ' || currentQuestion.type === 'TRUE_FALSE'
+        ? selectedOption || ''
+        : textAnswer;
+
+      await submitSrsAnswer({
+        bookId: book.id!,
+        questionId: currentQuestion.id,
+        userAnswer,
+        rating,
+        questionFormat: currentQuestion.text.substring(0, 100), // Store a snippet of the question format
+      });
+    } catch (error) {
+      console.error('Failed to submit SRS rating:', error);
+      // Continue anyway - don't block the user
+    } finally {
+      setIsSubmittingRating(false);
+      // Move to next question
+      proceedToNext();
+    }
+  };
+
+  const proceedToNext = () => {
     if (currentQuestionIndex + 1 >= totalQuestions) {
       setStep('RESULTS');
     } else {
@@ -333,6 +416,17 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
       setTextAnswer('');
       setRevealedHintIndex(-1);
       setCurrentFeedback(null);
+      setSelectedRating(null);
+    }
+  };
+
+  const handleNext = () => {
+    if (useSrs) {
+      // In SRS mode, rating selection handles progression
+      // This is a fallback for non-SRS mode
+      proceedToNext();
+    } else {
+      proceedToNext();
     }
   };
 
@@ -679,6 +773,39 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   );
 
   const renderQuiz = () => {
+    // All Caught Up state (for Quick mode with no due cards)
+    if (allCaughtUp) {
+      return (
+        <div className="w-full max-w-md mx-auto flex flex-col items-center justify-center h-full animate-fade-in">
+          <div className="bg-green-500/20 p-6 rounded-full mb-6">
+            <Trophy className="w-16 h-16 text-green-400" />
+          </div>
+          <h3 className="text-2xl font-bold text-white mb-3">All Caught Up! 🎉</h3>
+          <p className="text-brand-cream/70 text-center mb-6 max-w-sm leading-relaxed">
+            You've reviewed all your due cards for today. Great job staying on top of your studies!
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button 
+              onClick={() => {
+                setTestMode('STANDARD');
+                setAllCaughtUp(false);
+                loadQuestions();
+              }}
+              className="px-6 py-3 bg-white/10 border border-white/20 rounded-xl text-white font-bold hover:bg-white/20 transition-colors"
+            >
+              Study New Cards
+            </button>
+            <button 
+              onClick={onClose} 
+              className="px-6 py-3 bg-brand-orange rounded-xl text-white font-bold hover:bg-brand-darkOrange transition-colors"
+            >
+              Return to Book
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (!currentQuestion) {
       return (
         <div className="w-full max-w-md mx-auto flex flex-col items-center justify-center h-full">
@@ -703,6 +830,33 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
             <div className="flex items-center justify-between mb-2 md:mb-3 text-brand-cream/60">
               <span className="font-mono text-xs md:text-sm tracking-widest font-bold">QUESTION {currentQuestionIndex + 1} / {totalQuestions}</span>
               <div className="flex items-center gap-3">
+                {/* SRS Stats */}
+                {useSrs && (srsDueCount > 0 || srsNewCount > 0) && (
+                  <>
+                    {srsDueCount > 0 && (
+                      <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 bg-blue-500/10 rounded text-blue-400 border border-blue-500/20">
+                        <RefreshCw className="w-3 h-3" />
+                        {srsDueCount} due
+                      </span>
+                    )}
+                    {srsNewCount > 0 && (
+                      <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 bg-green-500/10 rounded text-green-400 border border-green-500/20">
+                        <Zap className="w-3 h-3" />
+                        {srsNewCount} new
+                      </span>
+                    )}
+                  </>
+                )}
+                {/* Current question SRS status */}
+                {useSrs && currentQuestion.srsData && (
+                  <span className={`hidden md:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border ${
+                    currentQuestion.srsData.isNew 
+                      ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' 
+                      : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                  }`}>
+                    {currentQuestion.srsData.isNew ? 'New' : `Box ${currentQuestion.srsData.box}`}
+                  </span>
+                )}
                 {currentQuestion.tags?.difficulty && (
                   <span className="hidden md:inline-block text-[10px] font-bold px-2 py-0.5 bg-white/5 rounded text-brand-cream/40 border border-white/5 tracking-wider uppercase">
                     {currentQuestion.tags.difficulty}
@@ -877,30 +1031,75 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
       {/* Sticky Footer Actions */}
       <div className="p-4 md:p-6 border-t border-white/5 bg-[#1a110e] w-full z-30 shrink-0 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.5)]">
-        <div className="max-w-3xl mx-auto flex justify-end gap-3">
+        <div className="max-w-3xl mx-auto">
             {!isAnswerChecked ? (
-            <button 
-                onClick={handleCheckAnswer}
-                disabled={(!selectedOption && !textAnswer) || isEvaluating}
-                className="w-full md:w-auto px-6 md:px-10 py-3 md:py-4 bg-white text-[#3E2723] font-bold text-base md:text-lg rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:bg-brand-cream transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-0.5"
-            >
-                {isEvaluating ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Evaluating...
-                  </>
-                ) : (
-                  'Check Answer'
+              <div className="flex justify-end">
+                <button 
+                    onClick={handleCheckAnswer}
+                    disabled={(!selectedOption && !textAnswer) || isEvaluating}
+                    className="w-full md:w-auto px-6 md:px-10 py-3 md:py-4 bg-white text-[#3E2723] font-bold text-base md:text-lg rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:bg-brand-cream transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-0.5"
+                >
+                    {isEvaluating ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Evaluating...
+                      </>
+                    ) : (
+                      'Check Answer'
+                    )}
+                </button>
+              </div>
+            ) : useSrs ? (
+              // SRS Rating Buttons
+              <div className="space-y-3">
+                <p className="text-center text-xs text-brand-cream/50 uppercase tracking-wider font-bold">
+                  How well did you know this?
+                </p>
+                <div className="grid grid-cols-4 gap-2 md:gap-3">
+                  {(['Again', 'Hard', 'Good', 'Easy'] as SrsRating[]).map((rating) => {
+                    const config = RATING_CONFIG[rating];
+                    const Icon = rating === 'Again' ? RotateCcw 
+                      : rating === 'Hard' ? ThumbsDown 
+                      : rating === 'Good' ? ThumbsUp 
+                      : Zap;
+                    
+                    return (
+                      <button
+                        key={rating}
+                        onClick={() => handleRatingSelect(rating)}
+                        disabled={isSubmittingRating}
+                        className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border transition-all hover:scale-[1.02] disabled:opacity-50 ${
+                          selectedRating === rating 
+                            ? `${config.bgColor} border-current` 
+                            : 'bg-black/20 border-white/10 hover:bg-white/5'
+                        }`}
+                        style={{ color: config.color }}
+                      >
+                        <Icon className="w-5 h-5 md:w-6 md:h-6" />
+                        <span className="font-bold text-sm">{config.label}</span>
+                        <span className="text-[10px] opacity-70">{config.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {isSubmittingRating && (
+                  <div className="flex items-center justify-center gap-2 text-brand-cream/60 text-sm">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving progress...
+                  </div>
                 )}
-            </button>
+              </div>
             ) : (
-            <button 
-                onClick={handleNext}
-                className="w-full md:w-auto px-6 md:px-10 py-3 md:py-4 bg-brand-orange text-white font-bold text-base md:text-lg rounded-xl shadow-[0_0_20px_rgba(243,120,53,0.3)] hover:bg-brand-darkOrange transition-all flex items-center justify-center gap-3 hover:-translate-y-0.5"
-            >
-                {currentQuestionIndex + 1 >= totalQuestions ? 'View Results' : 'Next Question'}
-                <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
-            </button>
+              // Legacy non-SRS mode - just Next button
+              <div className="flex justify-end">
+                <button 
+                    onClick={handleNext}
+                    className="w-full md:w-auto px-6 md:px-10 py-3 md:py-4 bg-brand-orange text-white font-bold text-base md:text-lg rounded-xl shadow-[0_0_20px_rgba(243,120,53,0.3)] hover:bg-brand-darkOrange transition-all flex items-center justify-center gap-3 hover:-translate-y-0.5"
+                >
+                    {currentQuestionIndex + 1 >= totalQuestions ? 'View Results' : 'Next Question'}
+                    <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
+                </button>
+              </div>
             )}
         </div>
       </div>

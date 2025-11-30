@@ -438,6 +438,134 @@ Resources:
             Path: /questions/{bookId}
             Method: get
 
+  # =====================================================
+  # SRS (SPACED REPETITION SYSTEM) FUNCTIONS
+  # =====================================================
+
+  SrsGetBatchFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/srsGetBatch.handler
+      Timeout: 30
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TextbookContentTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserProgressTable
+      Events:
+        SrsGetBatch:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /srs/next-batch
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  SrsSubmitAnswerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/srsSubmitAnswer.handler
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserProgressTable
+      Events:
+        SrsSubmitAnswer:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /srs/submit-answer
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  SrsChapterStatsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/srsChapterStats.handler
+      Timeout: 15
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TextbookContentTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserProgressTable
+      Events:
+        SrsChapterStats:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /srs/chapter-stats/{bookId}
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  # =====================================================
+  # USER ACTIVE BOOKS
+  # =====================================================
+
+  ActiveBooksFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/activeBooks.handler
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserProgressTable
+      Events:
+        ListActiveBooks:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /user/active-books
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        AddActiveBook:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /user/active-books
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        RemoveActiveBook:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TextbookApi
+            Path: /user/active-books/{bookId}
+            Method: delete
+            Auth:
+              Authorizer: CognitoAuthorizer
+
   EvaluateAnswerFunction:
     Type: AWS::Serverless::Function
     Metadata:

@@ -88,7 +88,7 @@ export type QuestionType = 'MCQ' | 'SHORT_ANSWER' | 'FILL_BLANK' | 'TRUE_FALSE' 
 
 // Hint structure for progressive hints
 export interface QuestionHint {
-  level: 'small' | 'medium';
+  level: 'small' | 'medium' | 'big';
   text: string;
 }
 
@@ -97,6 +97,9 @@ export interface QuestionTags {
   difficulty: 'basic' | 'medium' | 'deep' | 'mastery';
   themes: string[];
   elements: string[];
+  style?: string[];   // e.g., 'irony', 'satire', 'wit', 'narrator_voice', 'free_indirect_discourse'
+  motifs?: string[];  // e.g., 'balls_dances', 'estates', 'letters', 'reading', 'journeys'
+  literaryDevices?: string[]; // e.g., 'metaphor', 'simile', 'foreshadowing', 'allusion', 'parallelism', 'foils', 'symbolism'
 }
 
 // Full assessment question from pre-generated questions
@@ -165,4 +168,81 @@ export interface BookProgress {
   weakAreas: string[];
   concepts: ConceptProgress[];
   chapterBreakdown: ChapterProgress[];
+}
+
+// ============================================
+// SRS (Spaced Repetition System) Types
+// ============================================
+
+export type SrsRating = 'Again' | 'Hard' | 'Good' | 'Easy';
+export type TestMode = 'Quick' | 'Standard' | 'Thorough';
+export type Scope = 'full' | 'chapters' | 'concepts';
+
+export interface SrsGetBatchRequest {
+  bookId: string;
+  mode: TestMode;
+  scope: Scope;
+  chapters?: number[];
+  concepts?: string[];
+  difficulty?: ('basic' | 'medium' | 'deep' | 'mastery')[];
+}
+
+export interface SrsGetBatchResponse {
+  questions: AssessmentQuestionWithSrs[];
+  metadata: {
+    totalDueToday: number;
+    newToday: number;
+    reviewToday: number;
+    streak: number;
+  };
+  message?: string;
+}
+
+export interface AssessmentQuestionWithSrs extends AssessmentQuestion {
+  srsData?: {
+    box: number;
+    dueDate: string;
+    isNew: boolean;
+    intervalDays: number;
+  };
+}
+
+export interface SrsSubmitRequest {
+  bookId: string;
+  questionId: string;
+  userAnswer: string;
+  rating: SrsRating;
+  questionFormat?: string;
+}
+
+export interface SrsSubmitResponse {
+  success: boolean;
+  isCorrect: boolean;
+  newBox: number;
+  newDueDate: string;
+  intervalDays: number;
+  streak: number;
+  totalReps: number;
+}
+
+export interface ChapterMasteryStats {
+  chapterNumber: number;
+  totalQuestions: number;
+  seenCount: number;
+  masteredCount: number;
+  dueCount: number;
+  newCount: number;
+  status: 'mastered' | 'in-progress' | 'untouched';
+  percentage: number;
+}
+
+export interface ChapterStatsResponse {
+  bookId: string;
+  chapters: ChapterMasteryStats[];
+  overall: {
+    totalQuestions: number;
+    masteredCount: number;
+    percentage: number;
+    streak: number;
+  };
 }

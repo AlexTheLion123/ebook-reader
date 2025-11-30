@@ -2,7 +2,7 @@ import { APIGatewayProxyHandler } from 'aws-lambda';
 import { queryItems, getItem } from '../utils/dynamodb';
 
 interface QuestionHint {
-  level: 'small' | 'medium';
+  level: 'small' | 'medium' | 'big';
   text: string;
 }
 
@@ -10,6 +10,9 @@ interface QuestionTags {
   difficulty: 'basic' | 'medium' | 'deep' | 'mastery';
   themes: string[];
   elements: string[];
+  style?: string[];   // e.g., 'irony', 'satire', 'wit', 'narrator_voice', 'free_indirect_discourse'
+  motifs?: string[];  // e.g., 'balls_dances', 'estates', 'letters', 'reading', 'journeys'
+  literaryDevices?: string[]; // e.g., 'metaphor', 'simile', 'foreshadowing', 'allusion', 'parallelism', 'foils', 'symbolism'
 }
 
 interface AssessmentQuestion {

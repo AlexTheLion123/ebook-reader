@@ -274,33 +274,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ progressData, onBack, onCo
           </h2>
           
           {/* Expand/Collapse All Button */}
-          <button 
-            onClick={areAllExpanded ? handleCollapseAll : handleExpandAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-brand-orange hover:bg-white/5 hover:text-white transition-all uppercase tracking-wider border border-transparent hover:border-white/10"
-          >
-            {areAllExpanded ? (
-              <>
-                <ChevronsUp className="w-4 h-4" /> Collapse All
-              </>
-            ) : (
-              <>
-                <ChevronsDown className="w-4 h-4" /> Expand All
-              </>
-            )}
-          </button>
+          {progressData.length > 0 && (
+            <button 
+              onClick={areAllExpanded ? handleCollapseAll : handleExpandAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-brand-orange hover:bg-white/5 hover:text-white transition-all uppercase tracking-wider border border-transparent hover:border-white/10"
+            >
+              {areAllExpanded ? (
+                <>
+                  <ChevronsUp className="w-4 h-4" /> Collapse All
+                </>
+              ) : (
+                <>
+                  <ChevronsDown className="w-4 h-4" /> Expand All
+                </>
+              )}
+            </button>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 gap-6">
-          {sortedData.map((book, idx) => (
-             <ProgressCard 
-                key={idx} 
-                book={book} 
-                onContinue={onContinue} 
-                isExpanded={expandedBooks.has(book.bookTitle)}
-                onToggle={() => toggleBook(book.bookTitle)}
-             />
-          ))}
-        </div>
+        {/* Empty State */}
+        {progressData.length === 0 ? (
+          <div className="bg-[#1a110e]/80 rounded-2xl border border-white/5 p-10 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-orange/10 mb-4">
+              <BookOpen className="w-8 h-8 text-brand-orange" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">No Active Courses Yet</h3>
+            <p className="text-brand-cream/60 mb-6 max-w-md mx-auto">
+              Start learning by clicking "Test Yourself" on any book. It will automatically be added to your active courses.
+            </p>
+            <button
+              onClick={onBack}
+              className="inline-flex items-center gap-2 bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:scale-105"
+            >
+              <BookOpen className="w-5 h-5" />
+              Browse Library
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6">
+            {sortedData.map((book, idx) => (
+               <ProgressCard 
+                  key={idx} 
+                  book={book} 
+                  onContinue={onContinue} 
+                  isExpanded={expandedBooks.has(book.bookTitle)}
+                  onToggle={() => toggleBook(book.bookTitle)}
+               />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

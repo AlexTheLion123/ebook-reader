@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Star, BookOpen, ChevronDown, ChevronUp, List, PlayCircle, BrainCircuit, BarChart2, RefreshCw, Zap, TrendingUp, Activity } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { ArrowLeft, Star, BookOpen, ChevronDown, ChevronUp, List, PlayCircle, BrainCircuit, BarChart2, RefreshCw, Zap, TrendingUp, Activity, Loader2 } from 'lucide-react';
 import { BookDetails, BookProgress } from '../types';
+import { isBookActive, addActiveBook, removeActiveBook } from '../services/userActiveBooksService';
+import { useToast, ToastContainer } from './Toast';
 
 interface BookDetailProps {
   book: BookDetails;
@@ -13,6 +15,64 @@ interface BookDetailProps {
 export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, onRead, onTest }) => {
   const [isChaptersOpen, setIsChaptersOpen] = useState(true);
   const [isProgressExpanded, setIsProgressExpanded] = useState(false);
+  const [isAddingBook, setIsAddingBook] = useState(false);
+  
+  const { toasts, removeToast, showSuccess, showError } = useToast();
+
+  // Handle Test Yourself click with auto-add to active courses
+  const handleTestClick = useCallback(async () => {
+    if (!book.id) {
+      onTest();
+      return;
+    }
+
+    setIsAddingBook(true);
+
+    try {
+      // Check if book is already in active courses
+      const alreadyActive = await isBookActive(book.id);
+
+      if (alreadyActive) {
+        // Already active, just start the quiz
+        onTest();
+      } else {
+        // First time - add to active courses
+        try {
+          await addActiveBook(book.id, book.title);
+          
+          // Show success toast with undo option
+          showSuccess(
+            `Added ${book.title} to your Active Courses`,
+            {
+              undoAction: async () => {
+                try {
+                  await removeActiveBook(book.id!);
+                } catch (undoError) {
+                  showError('Undo failed');
+                }
+              },
+              undoLabel: '↩ Undo',
+              duration: 8000,
+            }
+          );
+
+          // Start the quiz immediately
+          onTest();
+        } catch (addError) {
+          // POST failed - show error toast, don't start quiz
+          showError("Couldn't add book — try again");
+          setIsAddingBook(false);
+          return;
+        }
+      }
+    } catch (error) {
+      // Error checking active status - just proceed with test
+      console.error('Error checking active book status:', error);
+      onTest();
+    }
+
+    setIsAddingBook(false);
+  }, [book.id, book.title, onTest, showSuccess, showError]);
 
   // Helper for concept color
   const getConceptColor = (score: number) => {
@@ -81,10 +141,15 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, 
               </button>
 
               <button 
-                onClick={onTest}
-                className="flex items-center justify-center gap-2 bg-[#5D4037] hover:bg-[#6D4C41] border border-[#A1887F]/30 text-white text-sm md:text-base font-bold py-2.5 px-6 md:py-3 md:px-6 rounded-full shadow-lg transition-all hover:scale-105 hover:border-brand-orange/50 group w-full sm:w-auto"
+                onClick={handleTestClick}
+                disabled={isAddingBook}
+                className="flex items-center justify-center gap-2 bg-[#5D4037] hover:bg-[#6D4C41] border border-[#A1887F]/30 text-white text-sm md:text-base font-bold py-2.5 px-6 md:py-3 md:px-6 rounded-full shadow-lg transition-all hover:scale-105 hover:border-brand-orange/50 group w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
-                <BrainCircuit className="w-5 h-5 text-brand-orange group-hover:text-white transition-colors" />
+                {isAddingBook ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <BrainCircuit className="w-5 h-5 text-brand-orange group-hover:text-white transition-colors" />
+                )}
                 Test Yourself
               </button>
             </div>
@@ -231,18 +296,28 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, 
                   {/* Action Buttons */}
                   <div className="px-4 sm:px-6 pb-4 sm:pb-6 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                       <button 
-                        onClick={(e) => { e.stopPropagation(); onTest(); }}
-                        className="flex items-center justify-center gap-2 bg-brand-orange hover:bg-brand-darkOrange text-white text-sm sm:text-base font-bold py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:-translate-y-0.5"
+                        onClick={(e) => { e.stopPropagation(); handleTestClick(); }}
+                        disabled={isAddingBook}
+                        className="flex items-center justify-center gap-2 bg-brand-orange hover:bg-brand-darkOrange text-white text-sm sm:text-base font-bold py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                       >
-                          <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
+                          {isAddingBook ? (
+                            <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                          ) : (
+                            <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
+                          )}
                           Continue Test
                       </button>
                       
                       <button 
-                        onClick={(e) => { e.stopPropagation(); onTest(); }}
-                        className="flex items-center justify-center gap-2 bg-transparent hover:bg-white/5 text-brand-cream/80 text-sm sm:text-base font-bold py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl border border-white/10 hover:border-white/20 transition-all hover:-translate-y-0.5"
+                        onClick={(e) => { e.stopPropagation(); handleTestClick(); }}
+                        disabled={isAddingBook}
+                        className="flex items-center justify-center gap-2 bg-transparent hover:bg-white/5 text-brand-cream/80 text-sm sm:text-base font-bold py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl border border-white/10 hover:border-white/20 transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                       >
-                          <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 opacity-60" />
+                          {isAddingBook ? (
+                            <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 opacity-60 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 opacity-60" />
+                          )}
                           Review Weak Areas
                       </button>
                   </div>
@@ -306,6 +381,9 @@ export const BookDetail: React.FC<BookDetailProps> = ({ book, progress, onBack, 
 
         </div>
       </div>
+
+      {/* Toast Container */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 };

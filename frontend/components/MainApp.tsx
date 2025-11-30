@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, Bell, BookOpen, LayoutGrid, List } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { listBooks } from '../services/backendService';
-import { BookRecommendation, BookDetails, BookProgress } from '../types';
+import { fetchChapterStats } from '../services/srsService';
+import { getUserActiveBooks } from '../services/userActiveBooksService';
+import { BookRecommendation, BookDetails, BookProgress, ChapterStatsResponse } from '../types';
 import { BookCard } from './BookCard';
 import { BookDetail } from './BookDetail';
 import { ReaderView } from './ReaderView';
@@ -15,6 +17,7 @@ interface MainAppProps {
   initialQuery?: string;
   initialBookId?: string;
   initialChapter?: number;
+  initialView?: string;
   onRequestLogin?: () => void;
 }
 
@@ -24,6 +27,7 @@ export const MainApp: React.FC<MainAppProps> = ({
   initialQuery = '', 
   initialBookId,
   initialChapter,
+  initialView,
   onRequestLogin 
 }) => {
   const { user, isAuthenticated } = useAuth();
@@ -47,6 +51,7 @@ export const MainApp: React.FC<MainAppProps> = ({
   const getInitialView = (): AppView => {
     if (initialChapter !== undefined) return 'READING';
     if (initialBookId) return 'DETAILS';
+    if (initialView === 'dashboard') return 'DASHBOARD';
     return 'HOME';
   };
   const [currentView, setCurrentView] = useState<AppView>(getInitialView);
@@ -63,61 +68,81 @@ export const MainApp: React.FC<MainAppProps> = ({
   // Track if this is the initial mount to avoid spurious URL updates
   const isInitialMount = useRef(true);
 
-  // Mock progress data for dashboard (will be replaced with real data later)
-  const [progressData] = useState<BookProgress[]>([
-    {
-      bookTitle: 'Pride and Prejudice',
-      overallMastery: 42,
-      chaptersMastered: 18,
-      totalChapters: 61,
-      lastTestedDate: '2023-10-25',
-      weakAreas: ['Character Motivations', 'Historical Context', 'Irony'],
-      concepts: [
-        { name: 'Themes', score: 40 },
-        { name: 'Symbols', score: 30 },
-        { name: 'Characters', score: 65 },
-        { name: 'Irony', score: 55 },
-      ],
-      chapterBreakdown: [
-        // First 18 chapters mastered (green)
-        ...Array.from({ length: 18 }, (_, i) => ({ chapterIndex: i, status: 'MASTERED' as const, score: 85 + Math.floor(Math.random() * 15) })),
-        // Next 8 chapters in progress (yellow)
-        ...Array.from({ length: 8 }, (_, i) => ({ chapterIndex: i + 18, status: 'IN_PROGRESS' as const, score: 40 + Math.floor(Math.random() * 30) })),
-        // Remaining 35 chapters untouched (gray)
-        ...Array.from({ length: 35 }, (_, i) => ({ chapterIndex: i + 26, status: 'UNTOUCHED' as const, score: 0 })),
-      ],
-    },
-    {
-      bookTitle: 'Calculus Made Easy',
-      overallMastery: 28,
-      chaptersMastered: 5,
-      totalChapters: 23,
-      lastTestedDate: '2023-11-12',
-      weakAreas: ['Integration', 'Partial Fractions', 'Limits'],
-      concepts: [
-        { name: 'Derivatives', score: 72 },
-        { name: 'Integration', score: 25 },
-        { name: 'Limits', score: 35 },
-        { name: 'Applications', score: 18 },
-      ],
-      chapterBreakdown: [
-        // First 5 chapters mastered
-        ...Array.from({ length: 5 }, (_, i) => ({ chapterIndex: i, status: 'MASTERED' as const, score: 80 + Math.floor(Math.random() * 20) })),
-        // Next 4 in progress
-        ...Array.from({ length: 4 }, (_, i) => ({ chapterIndex: i + 5, status: 'IN_PROGRESS' as const, score: 30 + Math.floor(Math.random() * 35) })),
-        // Remaining 14 untouched
-        ...Array.from({ length: 14 }, (_, i) => ({ chapterIndex: i + 9, status: 'UNTOUCHED' as const, score: 0 })),
-      ],
-    },
-  ]);
+  // Progress data for dashboard - fetched from SRS API for ACTIVE books only
+  const [progressData, setProgressData] = useState<BookProgress[]>([]);
+  const [loadingProgress, setLoadingProgress] = useState(false);
 
-  const fetchBooks = async (searchQuery?: string, preserveView = false) => {
-    setLoading(true);
-    // Reset detail view when fetching books (unless preserving view for deep link)
-    if (!preserveView) {
-      setSelectedBook(null);
-      setCurrentView('HOME');
+  // Fetch progress data only for books in user's Active Courses
+  const fetchProgressData = useCallback(async (bookList: BookRecommendation[]) => {
+    if (!isAuthenticated || bookList.length === 0) {
+      setProgressData([]);
+      return;
     }
+
+    setLoadingProgress(true);
+    const progressResults: BookProgress[] = [];
+
+    try {
+      // Get user's active books from backend
+      const activeBooks = await getUserActiveBooks();
+      const activeBookIds = new Set(activeBooks.map(ab => ab.bookId));
+
+      // Only fetch progress for books that are in active courses
+      const activeBooksFromList = bookList.filter(book => book.id && activeBookIds.has(book.id));
+
+      for (const book of activeBooksFromList) {
+        if (!book.id) continue;
+        
+        try {
+          const stats: ChapterStatsResponse = await fetchChapterStats(book.id);
+          
+          // Convert ChapterStatsResponse to BookProgress format
+          const bookProgress: BookProgress = {
+            bookTitle: book.title,
+            overallMastery: stats.overall.percentage,
+            chaptersMastered: stats.chapters.filter(c => c.status === 'mastered').length,
+            totalChapters: stats.chapters.length,
+            lastTestedDate: new Date().toISOString().split('T')[0], // TODO: track this in backend
+            weakAreas: [], // Could be derived from low-scoring concepts
+            concepts: stats.concepts.map(c => ({ name: c.name, score: c.score })),
+            chapterBreakdown: stats.chapters.map(c => ({
+              chapterIndex: c.chapterNumber - 1, // Convert to 0-indexed
+              status: c.status === 'mastered' ? 'MASTERED' as const 
+                : c.status === 'in-progress' ? 'IN_PROGRESS' as const 
+                : 'UNTOUCHED' as const,
+              score: c.percentage,
+            })),
+          };
+          progressResults.push(bookProgress);
+        } catch (error) {
+          console.debug(`Could not fetch progress for ${book.title}:`, error);
+          // Create empty progress entry for this active book
+          progressResults.push({
+            bookTitle: book.title,
+            overallMastery: 0,
+            chaptersMastered: 0,
+            totalChapters: book.chapters?.length || 0,
+            lastTestedDate: '',
+            weakAreas: [],
+            concepts: [],
+            chapterBreakdown: (book.chapters || []).map((_, idx) => ({
+              chapterIndex: idx,
+              status: 'UNTOUCHED' as const,
+              score: 0,
+            })),
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching active books:', error);
+    }
+
+    setProgressData(progressResults);
+    setLoadingProgress(false);
+  }, [isAuthenticated]);
+
+  const fetchBooks = async (searchQuery?: string) => {
+    setLoading(true);
     
     try {
       const backendBooks = await listBooks();
@@ -147,6 +172,9 @@ export const MainApp: React.FC<MainAppProps> = ({
       });
 
       setBooks(mappedBooks as any);
+      
+      // Fetch progress data for these books (if authenticated)
+      fetchProgressData(mappedBooks);
     } catch (e) {
       console.error("Failed to fetch books", e);
     } finally {
@@ -205,13 +233,12 @@ export const MainApp: React.FC<MainAppProps> = ({
 
   const handleNavDashboard = () => {
     setCurrentView('DASHBOARD');
-    navigate('/app?view=dashboard', { replace: true });
+    navigate('/dashboard', { replace: true });
   };
 
   // Fetch books on mount
   useEffect(() => {
-    // Preserve view if this is a deep link (initialBookId means we're loading a specific book/chapter)
-    fetchBooks(undefined, !!initialBookId);
+    fetchBooks();
   }, []);
 
   // Handle URL params for deep linking
@@ -358,6 +385,8 @@ export const MainApp: React.FC<MainAppProps> = ({
             onBack={handleNavHome}
             onContinue={(bookTitle) => {
               setQuery(bookTitle);
+              setSelectedBook(null);
+              setCurrentView('HOME');
               fetchBooks(bookTitle);
             }}
           />
