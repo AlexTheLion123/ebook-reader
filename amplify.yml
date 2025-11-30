@@ -7,6 +7,11 @@ frontend:
         - npm ci
     build:
       commands:
+        # Set Cognito environment variables for production build
+        - echo "VITE_COGNITO_USER_POOL_ID=$VITE_COGNITO_USER_POOL_ID" >> .env
+        - echo "VITE_COGNITO_CLIENT_ID=$VITE_COGNITO_CLIENT_ID" >> .env
+        - echo "VITE_COGNITO_DOMAIN=$VITE_COGNITO_DOMAIN" >> .env
+        - echo "VITE_AWS_REGION=$VITE_AWS_REGION" >> .env
         - npm run build
   artifacts:
     baseDirectory: frontend/dist
