@@ -4,3 +4,6 @@ cozy-library
 **/node_modules
 # SAM config with secrets
 backend/samconfig.toml
+
+# Frontend env with secrets
+frontend/.env
