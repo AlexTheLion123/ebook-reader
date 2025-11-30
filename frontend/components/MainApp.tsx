@@ -7,6 +7,9 @@ import { BookDetail } from './BookDetail';
 import { ReaderView } from './ReaderView';
 import { TestSuite } from './TestSuite';
 import { Dashboard } from './Dashboard';
+import { UserMenu } from './UserMenu';
+import { useAuth } from './AuthProvider';
+import { useAppNavigation } from '../App';
 
 interface MainAppProps {
   initialQuery: string;
@@ -15,6 +18,8 @@ interface MainAppProps {
 type AppView = 'HOME' | 'DETAILS' | 'READING' | 'TESTING' | 'DASHBOARD';
 
 export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
+  const { user, isAuthenticated } = useAuth();
+  const { requestLogin } = useAppNavigation();
   const [query, setQuery] = useState(initialQuery);
   const [books, setBooks] = useState<BookRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -223,12 +228,16 @@ export const MainApp: React.FC<MainAppProps> = ({ initialQuery }) => {
             <Bell className="w-5 h-5 text-white" />
             <span className="absolute top-2 right-2 w-2 h-2 bg-brand-orange rounded-full border-2 border-[#5D4037]"></span>
           </button>
-          <button className="flex items-center gap-2 bg-white/10 hover:bg-white/20 pl-2 pr-4 py-1.5 rounded-full transition-colors border border-white/10" onClick={handleNavDashboard}>
-            <div className="w-8 h-8 bg-gradient-to-br from-brand-orange to-brand-darkOrange rounded-full flex items-center justify-center text-white font-bold text-sm shadow-inner">
-              JD
-            </div>
-            <span className="text-sm font-medium hidden sm:block text-white">My Account</span>
-          </button>
+          {isAuthenticated ? (
+            <UserMenu />
+          ) : (
+            <button className="flex items-center gap-2 bg-white/10 hover:bg-white/20 pl-2 pr-4 py-1.5 rounded-full transition-colors border border-white/10" onClick={requestLogin}>
+              <div className="w-8 h-8 bg-gradient-to-br from-brand-orange to-brand-darkOrange rounded-full flex items-center justify-center text-white font-bold text-sm shadow-inner">
+                ?
+              </div>
+              <span className="text-sm font-medium hidden sm:block text-white">Sign In</span>
+            </button>
+          )}
         </div>
       </nav>
 

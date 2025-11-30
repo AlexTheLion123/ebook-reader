@@ -1,10 +1,44 @@
 import { BookContentResponse, AskResponse, SummarizeResponse, GenerateQuizResponse, EvaluateQuizResponse, Book, GetQuestionsResponse, QuestionType } from '../types';
+import { fetchAuthSession } from 'aws-amplify/auth';
 
-const BASE_URL = 'https://6ga7cukouj.execute-api.eu-west-1.amazonaws.com/prod';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://6ga7cukouj.execute-api.eu-west-1.amazonaws.com/prod';
+
+/**
+ * Get authorization headers for authenticated API requests
+ * Returns empty object if user is not authenticated
+ */
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+  } catch (error) {
+    // User not authenticated, return empty headers
+    console.debug('User not authenticated, making unauthenticated request');
+  }
+  return {};
+};
+
+/**
+ * Helper to make authenticated fetch requests
+ */
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const authHeaders = await getAuthHeaders();
+  return fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+      ...options.headers,
+    },
+  });
+};
 
 export const getBookContent = async (bookId: string, chapter: number = 1): Promise<BookContentResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/content/${bookId}?chapter=${chapter}`);
+    const response = await authenticatedFetch(`${BASE_URL}/content/${bookId}?chapter=${chapter}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch content: ${response.statusText}`);
     }
@@ -17,11 +51,8 @@ export const getBookContent = async (bookId: string, chapter: number = 1): Promi
 
 export const askQuestion = async (bookId: string, chapterNumber: number, question: string, quizMode?: boolean): Promise<AskResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/ask`, {
+    const response = await authenticatedFetch(`${BASE_URL}/ask`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ bookId, chapterNumber, question, quizMode }),
     });
 
@@ -37,11 +68,8 @@ export const askQuestion = async (bookId: string, chapterNumber: number, questio
 
 export const summarizeChapter = async (bookId: string, chapterNumber: number): Promise<SummarizeResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/summarize`, {
+    const response = await authenticatedFetch(`${BASE_URL}/summarize`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ bookId, chapterNumber }),
     });
 
@@ -57,11 +85,8 @@ export const summarizeChapter = async (bookId: string, chapterNumber: number): P
 
 export const generateQuiz = async (bookId: string, chapterNumber: number, questionCount?: number): Promise<GenerateQuizResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/quiz/generate`, {
+    const response = await authenticatedFetch(`${BASE_URL}/quiz/generate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ bookId, chapterNumber, questionCount }),
     });
 
@@ -77,11 +102,8 @@ export const generateQuiz = async (bookId: string, chapterNumber: number, questi
 
 export const evaluateQuiz = async (question: string, userAnswer: string, correctAnswer: string, type: 'multiple-choice' | 'short-answer'): Promise<EvaluateQuizResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/quiz/evaluate`, {
+    const response = await authenticatedFetch(`${BASE_URL}/quiz/evaluate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ question, userAnswer, correctAnswer, type }),
     });
 
@@ -97,7 +119,7 @@ export const evaluateQuiz = async (question: string, userAnswer: string, correct
 
 export const listBooks = async (): Promise<Book[]> => {
   try {
-    const response = await fetch(`${BASE_URL}/books`);
+    const response = await authenticatedFetch(`${BASE_URL}/books`);
     if (!response.ok) {
       throw new Error(`Failed to list books: ${response.statusText}`);
     }
@@ -142,7 +164,7 @@ export const fetchQuestions = async (params: FetchQuestionsParams): Promise<GetQ
     const queryString = queryParams.toString();
     const url = `${BASE_URL}/questions/${params.bookId}${queryString ? `?${queryString}` : ''}`;
     
-    const response = await fetch(url);
+    const response = await authenticatedFetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch questions: ${response.statusText}`);
     }
@@ -164,11 +186,8 @@ export interface EvaluateAnswerParams {
 
 export const evaluateAnswer = async (params: EvaluateAnswerParams): Promise<EvaluateQuizResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/quiz/evaluate`, {
+    const response = await authenticatedFetch(`${BASE_URL}/quiz/evaluate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(params),
     });
 
@@ -194,14 +213,11 @@ export const getHint = async (
   question: string, 
   hintLevel: 1 | 2 | 3,
   chapterNumber?: number,
-  questionType?: 'MCQ' | 'SHORT_ANSWER' | 'FILL_BLANK' | 'TRUE_FALSE'
+  questionType?: QuestionType
 ): Promise<HintResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/hint`, {
+    const response = await authenticatedFetch(`${BASE_URL}/hint`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ bookId, question, hintLevel, chapterNumber, questionType }),
     });
 
@@ -230,7 +246,7 @@ export interface QuestionMetadataResponse {
  */
 export const fetchQuestionMetadata = async (bookId: string): Promise<QuestionMetadataResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/questions/${bookId}?metadata=true`);
+    const response = await authenticatedFetch(`${BASE_URL}/questions/${bookId}?metadata=true`);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch question metadata: ${response.statusText}`);
@@ -239,5 +255,18 @@ export const fetchQuestionMetadata = async (bookId: string): Promise<QuestionMet
   } catch (error) {
     console.error('Error fetching question metadata:', error);
     throw error;
+  }
+};
+
+/**
+ * Get the current authenticated user's ID
+ * Returns null if not authenticated
+ */
+export const getCurrentUserId = async (): Promise<string | null> => {
+  try {
+    const session = await fetchAuthSession();
+    return session.tokens?.idToken?.payload?.sub as string || null;
+  } catch (error) {
+    return null;
   }
 };

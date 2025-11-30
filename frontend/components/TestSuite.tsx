@@ -104,9 +104,9 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
 
   // Test mode configurations
   const TEST_MODE_CONFIG = {
-    QUICK: { targetQuestions: 10, label: 'Quick', description: '~10 questions', subtext: 'Fast review' },
-    STANDARD: { targetQuestions: 20, label: 'Standard', description: '80% mastery target', subtext: 'Adaptive pacing' },
-    THOROUGH: { targetQuestions: 40, label: 'Thorough', description: 'Full Leitner', subtext: 'Until solidified' },
+    QUICK: { targetQuestions: 5, label: 'Quick', description: '~5 questions', subtext: 'Fast review' },
+    STANDARD: { targetQuestions: 15, label: 'Medium', description: '~15 questions', subtext: 'Balanced' },
+    THOROUGH: { targetQuestions: 30, label: 'Thorough', description: '~30 questions', subtext: 'Comprehensive' },
   };
 
   // Derived State
@@ -542,26 +542,106 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
         {/* Test Mode (Length) */}
         <div className="space-y-2">
             <label className="text-xs font-bold text-brand-orange uppercase tracking-wider flex items-center gap-2">
-            <Timer className="w-4 h-4" /> Mode
+            <Timer className="w-4 h-4" /> Length
             </label>
             <div className="grid grid-cols-3 gap-3">
             {(['QUICK', 'STANDARD', 'THOROUGH'] as const).map((mode) => (
                 <button 
                 key={mode}
                 onClick={() => setTestMode(mode)}
-                className={`p-3 rounded-xl border transition-all text-left ${testMode === mode ? 'bg-brand-orange/20 border-brand-orange text-white' : 'bg-black/20 border-white/5 text-brand-cream/60 hover:bg-white/5'}`}
+                className={`p-3 rounded-xl border transition-all text-center ${testMode === mode ? 'bg-brand-orange/20 border-brand-orange text-white' : 'bg-black/20 border-white/5 text-brand-cream/60 hover:bg-white/5'}`}
                 >
-                <div className="font-bold text-sm">{TEST_MODE_CONFIG[mode].label}</div>
-                <div className="text-[10px] opacity-60 mt-0.5">{TEST_MODE_CONFIG[mode].subtext}</div>
+                <div className="font-bold text-sm">{TEST_MODE_CONFIG[mode].targetQuestions} Qs</div>
                 </button>
             ))}
             </div>
         </div>
 
+        {/* Active Filters Row */}
+        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-white/5">
+           <span className="text-[10px] font-bold text-brand-cream/40 uppercase tracking-widest mr-1">Active:</span>
+           
+           {/* Scope-based Chips */}
+           {scope === 'FULL' && (
+             <div className="px-3 py-1 rounded-full text-xs font-bold bg-white/5 text-brand-cream border border-white/10 cursor-default">
+                Full Book
+             </div>
+           )}
+
+           {scope === 'CHAPTER' && selectedChapters.length === 0 && (
+             <div className="px-3 py-1 rounded-full text-xs font-bold bg-white/5 text-brand-cream border border-white/10 cursor-default">
+                All Chapters
+             </div>
+           )}
+
+           {scope === 'CHAPTER' && selectedChapters.length > 0 && (
+             <>
+               {selectedChapters.slice(0, 5).map(idx => (
+                 <button 
+                    key={idx}
+                    onClick={() => setSelectedChapters(prev => prev.filter(i => i !== idx))}
+                    className="px-3 py-1 rounded-full text-xs font-bold bg-brand-orange/10 text-brand-orange border border-brand-orange/20 flex items-center gap-1.5 hover:bg-brand-orange/20 transition-colors group"
+                 >
+                    <span>Chap {idx + 1}</span>
+                    <X className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                 </button>
+               ))}
+               {selectedChapters.length > 5 && (
+                 <button 
+                    onClick={() => setSelectedChapters(prev => prev.slice(0, 5))}
+                    className="px-3 py-1 rounded-full text-xs font-bold bg-brand-orange/10 text-brand-orange border border-brand-orange/20 flex items-center gap-1.5 hover:bg-brand-orange/20 transition-colors group"
+                 >
+                    <span>+{selectedChapters.length - 5} more</span>
+                    <X className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                 </button>
+               )}
+             </>
+           )}
+
+           {scope === 'CONCEPTS' && selectedConcepts.length === 0 && (
+             <div className="px-3 py-1 rounded-full text-xs font-bold bg-white/5 text-brand-cream border border-white/10 cursor-default">
+                All Concepts
+             </div>
+           )}
+
+           {scope === 'CONCEPTS' && selectedConcepts.length > 0 && (
+             <>
+               {selectedConcepts.slice(0, 5).map(c => (
+                 <button 
+                    key={c}
+                    onClick={() => setSelectedConcepts(prev => prev.filter(concept => concept !== c))}
+                    className="px-3 py-1 rounded-full text-xs font-bold bg-brand-orange/10 text-brand-orange border border-brand-orange/20 flex items-center gap-1.5 hover:bg-brand-orange/20 transition-colors group"
+                 >
+                    <span>{c}</span>
+                    <X className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                 </button>
+               ))}
+               {selectedConcepts.length > 5 && (
+                 <button 
+                    onClick={() => setSelectedConcepts(prev => prev.slice(0, 5))}
+                    className="px-3 py-1 rounded-full text-xs font-bold bg-brand-orange/10 text-brand-orange border border-brand-orange/20 flex items-center gap-1.5 hover:bg-brand-orange/20 transition-colors group"
+                 >
+                    <span>+{selectedConcepts.length - 5} more</span>
+                    <X className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                 </button>
+               )}
+             </>
+           )}
+
+           {/* Difficulty & Length Chips */}
+           <div className="px-3 py-1 rounded-full text-xs font-bold bg-white/5 text-brand-cream/80 border border-white/10 cursor-default capitalize">
+              {difficulty.toLowerCase()}
+           </div>
+           
+           <div className="px-3 py-1 rounded-full text-xs font-bold bg-white/5 text-brand-cream/80 border border-white/10 cursor-default">
+              {TEST_MODE_CONFIG[testMode].label} ({TEST_MODE_CONFIG[testMode].targetQuestions})
+           </div>
+        </div>
+
         <button 
             onClick={handleStart}
             disabled={loadingQuestions}
-            className="w-full bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
         >
             <GraduationCap className="w-5 h-5" />
             Start Assessment

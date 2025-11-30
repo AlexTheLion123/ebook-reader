@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, createContext, useContext } from 'react';
 import { HeroSection } from './components/HeroSection';
 import { MainApp } from './components/MainApp';
+import { AuthProvider, useAuth } from './components/AuthProvider';
+import { LoginPage } from './components/LoginPage';
+import { Loader2 } from 'lucide-react';
 
 // The cozy dark library for the Landing Page
 const LANDING_BG_URL = "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?q=80&w=2828&auto=format&fit=crop";
@@ -9,9 +12,20 @@ const LANDING_BG_URL = "https://images.unsplash.com/photo-1481627834876-b7833e8f
 // We will tint this heavily with CSS to match the "Orange Vector" aesthetic provided
 const APP_BG_URL = "https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=2690&auto=format&fit=crop";
 
-type ViewState = 'LANDING' | 'APP';
+type ViewState = 'LANDING' | 'APP' | 'LOGIN';
 
-function App() {
+// Context for app-level navigation
+interface AppNavigationContextType {
+  requestLogin: () => void;
+}
+
+const AppNavigationContext = createContext<AppNavigationContextType>({ requestLogin: () => {} });
+
+export const useAppNavigation = () => useContext(AppNavigationContext);
+
+// Inner app component that uses auth context
+function AppContent() {
+  const { isAuthenticated, isLoading, isConfigured } = useAuth();
   const [view, setView] = useState<ViewState>('LANDING');
   const [initialQuery, setInitialQuery] = useState('');
 
@@ -20,8 +34,37 @@ function App() {
     setView('APP');
   };
 
+  const handleRequestLogin = () => {
+    setView('LOGIN');
+  };
+
+  const handleCancelLogin = () => {
+    setView('APP');
+  };
+
+  // Show loading spinner while checking auth state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#3E2723]">
+        <Loader2 className="w-12 h-12 text-amber-400 animate-spin" />
+      </div>
+    );
+  }
+
+  // If auth is configured and user is not authenticated, always show login
+  if (isConfigured && !isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  // If user manually requested login (even if auth not configured)
+  if (view === 'LOGIN') {
+    return <LoginPage onCancel={handleCancelLogin} />;
+  }
+
+  // Main app (either auth not configured, or user is authenticated)
   return (
-    <div className="relative w-full min-h-screen overflow-hidden bg-[#3E2723]">
+    <AppNavigationContext.Provider value={{ requestLogin: handleRequestLogin }}>
+      <div className="relative w-full min-h-screen overflow-hidden bg-[#3E2723]">
       {/* 
         Background Rendering Logic:
         - Landing: Cozy dark image with curved overlay
@@ -70,6 +113,16 @@ function App() {
         )}
       </div>
     </div>
+    </AppNavigationContext.Provider>
+  );
+}
+
+// Root app component with AuthProvider
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

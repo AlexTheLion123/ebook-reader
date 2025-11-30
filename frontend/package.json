@@ -10,7 +10,9 @@
     "deploy:amplify": "npm run build && echo 'Build complete! Deploy via AWS Amplify Console'"
   },
   "dependencies": {
+    "@aws-amplify/ui-react": "^6.13.1",
     "@google/genai": "^1.30.0",
+    "aws-amplify": "^6.15.8",
     "katex": "^0.16.9",
     "lucide-react": "^0.554.0",
     "react": "^19.2.0",

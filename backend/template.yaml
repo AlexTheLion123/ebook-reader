@@ -7,9 +7,28 @@ Parameters:
     Type: String
     Description: Email address for EPUB processing failure notifications
     Default: ""
+  
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth Client ID for social login
+    Default: ""
+  
+  GoogleClientSecret:
+    Type: String
+    Description: Google OAuth Client Secret for social login
+    NoEcho: true
+    Default: ""
+  
+  AppDomain:
+    Type: String
+    Description: The domain for the Cognito hosted UI (must be unique)
+    Default: "quickbook-auth"
 
 Conditions:
   HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, ""]]
+  HasGoogleOAuth: !And
+    - !Not [!Equals [!Ref GoogleClientId, ""]]
+    - !Not [!Equals [!Ref GoogleClientSecret, ""]]
 
 Globals:
   Function:
@@ -90,6 +109,148 @@ Resources:
         - AttributeName: SK
           KeyType: RANGE
 
+  # =====================================================
+  # COGNITO AUTHENTICATION
+  # =====================================================
+  
+  # Cognito User Pool - Main user directory
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: quickbook-users
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      UsernameConfiguration:
+        CaseSensitive: false
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      UserPoolTags:
+        Application: QuickBook
+  
+  # Google Identity Provider (conditional)
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasGoogleOAuth
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: "profile email openid"
+      AttributeMapping:
+        email: email
+        name: name
+        username: sub
+  
+  # User Pool Domain for Hosted UI
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "quickbook-auth-${AWS::AccountId}"
+      UserPoolId: !Ref CognitoUserPool
+  
+  # User Pool Client for Web App (with Google OAuth)
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: HasGoogleOAuth
+    DependsOn:
+      - GoogleIdentityProvider
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: quickbook-web-client
+      GenerateSecret: false
+      RefreshTokenValidity: 30
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      TokenValidityUnits:
+        RefreshToken: days
+        AccessToken: hours
+        IdToken: hours
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+        - Google
+      CallbackURLs:
+        - http://localhost:3000
+        - http://localhost:3000/
+        - https://main.d2ogghj2sbh4hl.amplifyapp.com
+        - https://main.d2ogghj2sbh4hl.amplifyapp.com/
+      LogoutURLs:
+        - http://localhost:3000
+        - https://main.d2ogghj2sbh4hl.amplifyapp.com
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+      PreventUserExistenceErrors: ENABLED
+  
+  # User Pool Client without Google (basic email/password only)
+  CognitoUserPoolClientBasic:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: quickbook-web-client-basic
+      GenerateSecret: false
+      RefreshTokenValidity: 30
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      TokenValidityUnits:
+        RefreshToken: days
+        AccessToken: hours
+        IdToken: hours
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - http://localhost:3000
+        - http://localhost:3000/
+        - https://main.d2ogghj2sbh4hl.amplifyapp.com
+        - https://main.d2ogghj2sbh4hl.amplifyapp.com/
+      LogoutURLs:
+        - http://localhost:3000
+        - https://main.d2ogghj2sbh4hl.amplifyapp.com
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+      PreventUserExistenceErrors: ENABLED
+
   # API Gateway
   TextbookApi:
     Type: AWS::Serverless::Api
@@ -97,8 +258,12 @@ Resources:
       StageName: prod
       Cors:
         AllowMethods: "'*'"
-        AllowHeaders: "'*'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
         AllowOrigin: "'*'"
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt CognitoUserPool.Arn
 
   # Lambda Functions
   UploadFunction:
@@ -1018,3 +1183,26 @@ Outputs:
   ProcessEpubFunctionName:
     Description: Lambda function name for S3 notification configuration
     Value: !Ref ProcessEpubFunction
+  
+  # Cognito Outputs
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolId"
+  
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !If [HasGoogleOAuth, !Ref CognitoUserPoolClient, !Ref CognitoUserPoolClientBasic]
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolClientId"
+  
+  CognitoUserPoolDomainUrl:
+    Description: Cognito Hosted UI Domain
+    Value: !Sub "https://${AppDomain}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com"
+    Export:
+      Name: !Sub "${AWS::StackName}-CognitoDomain"
+  
+  CognitoRegion:
+    Description: AWS Region for Cognito
+    Value: !Ref AWS::Region
