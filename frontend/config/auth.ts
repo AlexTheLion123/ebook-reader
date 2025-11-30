@@ -3,6 +3,14 @@
 
 import type { ResourcesConfig } from 'aws-amplify';
 
+// Auto-detect the current origin for redirects
+const getCurrentOrigin = () => {
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return 'http://localhost:5173';
+};
+
 export const authConfig: ResourcesConfig = {
   Auth: {
     Cognito: {
@@ -13,10 +21,10 @@ export const authConfig: ResourcesConfig = {
           domain: import.meta.env.VITE_COGNITO_DOMAIN || '',
           scopes: ['email', 'openid', 'profile'],
           redirectSignIn: [
-            import.meta.env.VITE_REDIRECT_SIGN_IN || 'http://localhost:5173'
+            import.meta.env.VITE_REDIRECT_SIGN_IN || getCurrentOrigin()
           ],
           redirectSignOut: [
-            import.meta.env.VITE_REDIRECT_SIGN_OUT || 'http://localhost:5173'
+            import.meta.env.VITE_REDIRECT_SIGN_OUT || getCurrentOrigin()
           ],
           responseType: 'code',
           providers: ['Google'],

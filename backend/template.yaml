@@ -198,11 +198,11 @@ Resources:
       CallbackURLs:
         - http://localhost:3000
         - http://localhost:3000/
-        - https://main.d2ogghj2sbh4hl.amplifyapp.com
-        - https://main.d2ogghj2sbh4hl.amplifyapp.com/
+        - https://main.d12hmt15z4iuqe.amplifyapp.com
+        - https://main.d12hmt15z4iuqe.amplifyapp.com/
       LogoutURLs:
         - http://localhost:3000
-        - https://main.d2ogghj2sbh4hl.amplifyapp.com
+        - https://main.d12hmt15z4iuqe.amplifyapp.com
       AllowedOAuthFlows:
         - code
         - implicit
@@ -236,11 +236,11 @@ Resources:
       CallbackURLs:
         - http://localhost:3000
         - http://localhost:3000/
-        - https://main.d2ogghj2sbh4hl.amplifyapp.com
-        - https://main.d2ogghj2sbh4hl.amplifyapp.com/
+        - https://main.d12hmt15z4iuqe.amplifyapp.com
+        - https://main.d12hmt15z4iuqe.amplifyapp.com/
       LogoutURLs:
         - http://localhost:3000
-        - https://main.d2ogghj2sbh4hl.amplifyapp.com
+        - https://main.d12hmt15z4iuqe.amplifyapp.com
       AllowedOAuthFlows:
         - code
         - implicit
