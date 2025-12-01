@@ -137,16 +137,29 @@ const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, onInstant
                   <List className="w-4 h-4" /> Chapter Map
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
-                    {book.chapterBreakdown.map((chap) => {
-                      let color = 'bg-white/5'; // Untouched
-                      if (chap.status === 'MASTERED') color = 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]';
-                      if (chap.status === 'IN_PROGRESS') color = 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.4)]';
+                    {/* Show ALL chapters using totalChapters, look up progress from chapterBreakdown */}
+                    {Array.from({ length: book.totalChapters }, (_, idx) => {
+                      // Find progress for this chapter if it exists
+                      const chap = book.chapterBreakdown.find(c => c.chapterIndex === idx);
+                      const hasTests = !!chap; // Chapter has test data
+                      const status = chap?.status || 'UNTOUCHED';
+                      
+                      // Chapters without tests: very dim, disabled look
+                      // Chapters with tests but untouched: slightly brighter
+                      // In progress: yellow glow
+                      // Mastered: green glow
+                      let color = 'bg-white/5 opacity-30'; // No tests - disabled
+                      if (hasTests) {
+                        color = 'bg-white/10'; // Has tests, untouched
+                        if (status === 'MASTERED') color = 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]';
+                        if (status === 'IN_PROGRESS') color = 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.4)]';
+                      }
                       
                       return (
                           <div 
-                            key={chap.chapterIndex}
+                            key={idx}
                             className={`w-3 h-3 md:w-4 md:h-4 rounded-[2px] transition-all cursor-help ${color}`}
-                            title={`Chapter ${chap.chapterIndex + 1}: ${chap.status.replace('_', ' ')}`}
+                            title={`Chapter ${idx + 1}: ${hasTests ? status.replace('_', ' ') : 'No questions yet'}`}
                           ></div>
                       );
                     })}

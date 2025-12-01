@@ -47,7 +47,7 @@ export const MainApp: React.FC<MainAppProps> = ({
   const [query, setQuery] = useState(initialQuery);
   const [books, setBooks] = useState<BookRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
@@ -130,6 +130,10 @@ export const MainApp: React.FC<MainAppProps> = ({
       for (const book of activeBooksFromList) {
         if (!book.id) continue;
         
+        // Get actual chapter count from book data (not from stats which only has tested chapters)
+        const bookChapters = (book as any).chapters || [];
+        const actualTotalChapters = bookChapters.length;
+        
         try {
           const stats: ChapterStatsResponse = await fetchChapterStats(book.id);
           
@@ -139,7 +143,7 @@ export const MainApp: React.FC<MainAppProps> = ({
             bookTitle: book.title,
             overallMastery: stats.overall.percentage,
             chaptersMastered: stats.chapters.filter(c => c.status === 'mastered').length,
-            totalChapters: stats.chapters.length,
+            totalChapters: actualTotalChapters, // Use actual book chapter count, not stats
             lastTestedDate: new Date().toISOString().split('T')[0], // TODO: track this in backend
             weakAreas: [], // Could be derived from low-scoring concepts
             concepts: [], // TODO: fetch concept stats from backend when available
@@ -220,7 +224,6 @@ export const MainApp: React.FC<MainAppProps> = ({
       console.error("Failed to fetch books", e);
     } finally {
       setLoading(false);
-      setHasSearched(true);
     }
   };
 
@@ -647,16 +650,21 @@ export const MainApp: React.FC<MainAppProps> = ({
               // Find progress data which contains bookId
               const progress = progressData.find(p => p.bookTitle === bookTitle);
               if (progress?.bookId) {
-                // Construct BookDetails from progress data
+                // Look up full book details from books array
+                const fullBook = books.find(b => (b as any).id === progress.bookId);
+                const chapters = (fullBook as any)?.chapters || progress.chapterBreakdown.map((_, i) => `Chapter ${i + 1}`);
+                const concepts = (fullBook as any)?.concepts || progress.concepts.map(c => c.name);
+                
+                // Construct BookDetails with full data
                 const details: BookDetails = {
                   id: progress.bookId,
                   title: progress.bookTitle,
-                  author: '',
-                  description: '',
+                  author: (fullBook as any)?.author || '',
+                  description: (fullBook as any)?.description || '',
                   rating: 0,
                   longDescription: '',
-                  chapters: progress.chapterBreakdown.map((_, i) => `Chapter ${i + 1}`),
-                  concepts: progress.concepts.map(c => c.name)
+                  chapters: chapters,
+                  concepts: concepts
                 };
                 
                 // Determine smart config based on progress
@@ -722,33 +730,45 @@ export const MainApp: React.FC<MainAppProps> = ({
               }
             }}
             onOpenTestSetup={(bookTitle) => {
-              // Find progress data which contains bookId
+              // Find the full book from our books list (has chapters/concepts)
               const progress = progressData.find(p => p.bookTitle === bookTitle);
               if (progress?.bookId) {
-                const bookInfo = {
-                  id: progress.bookId,
-                  title: progress.bookTitle,
-                  author: '',
-                  description: '',
-                  chapters: progress.chapterBreakdown.map((c, i) => ({ title: `Chapter ${i + 1}` })),
-                  concepts: progress.concepts.map(c => c.name)
-                };
-                handleOpenTestSetup(bookInfo as any);
+                // Look up full book details from books array
+                const fullBook = books.find(b => (b as any).id === progress.bookId);
+                if (fullBook) {
+                  handleOpenTestSetup(fullBook);
+                } else {
+                  // Fallback if book not in list (shouldn't happen)
+                  const bookInfo = {
+                    id: progress.bookId,
+                    title: progress.bookTitle,
+                    author: '',
+                    description: '',
+                    chapters: progress.chapterBreakdown.map((_, i) => `Chapter ${i + 1}`),
+                    concepts: progress.concepts.map(c => c.name)
+                  };
+                  handleOpenTestSetup(bookInfo as any);
+                }
               }
             }}
             onRead={(bookTitle) => {
-              // Find progress data which contains bookId
+              // Find the full book from our books list
               const progress = progressData.find(p => p.bookTitle === bookTitle);
               if (progress?.bookId) {
+                // Look up full book details from books array
+                const fullBook = books.find(b => (b as any).id === progress.bookId);
+                const chapters = (fullBook as any)?.chapters || progress.chapterBreakdown.map((_, i) => `Chapter ${i + 1}`);
+                const concepts = (fullBook as any)?.concepts || progress.concepts.map(c => c.name);
+                
                 const details: BookDetails = {
                   id: progress.bookId,
                   title: progress.bookTitle,
-                  author: '',
-                  description: '',
+                  author: (fullBook as any)?.author || '',
+                  description: (fullBook as any)?.description || '',
                   rating: 0,
                   longDescription: '',
-                  chapters: progress.chapterBreakdown.map((c, i) => `Chapter ${i + 1}`),
-                  concepts: progress.concepts.map(c => c.name)
+                  chapters: chapters,
+                  concepts: concepts
                 };
                 
                 setSelectedBook(details);
@@ -794,7 +814,7 @@ export const MainApp: React.FC<MainAppProps> = ({
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6 mb-4 md:mb-6">
               <div>
                 <h2 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                  {hasSearched ? `Results for "${query || 'Classics'}"` : 'Discover Your Next Read'}
+                  {query ? `Results for "${query}"` : 'Discover Your Next Read'}
                 </h2>
                 <p className="text-sm md:text-base text-brand-cream/80">Explore our vast collection of curated titles.</p>
               </div>
@@ -885,9 +905,9 @@ export const MainApp: React.FC<MainAppProps> = ({
                     viewMode={viewMode}
                   />
                 ))}
-                {books.length === 0 && hasSearched && (
+                {books.length === 0 && !loading && (
                    <div className="col-span-full text-center py-20 text-white/60">
-                      No books found. Try a different search term.
+                      No books found. Upload a book to get started.
                    </div>
                 )}
               </div>
@@ -899,24 +919,12 @@ export const MainApp: React.FC<MainAppProps> = ({
       {/* Toast container - persists across view changes */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
       
-      {/* Test Config Modal - settings cog opens this */}
+      {/* Test Config Modal - settings cog opens this (config only, no test start) */}
       <TestConfigModal
         book={configModalBook!}
         isOpen={showConfigModal && !!configModalBook}
         onClose={() => {
           setShowConfigModal(false);
-          setConfigModalBook(null);
-        }}
-        onStartTest={(config) => {
-          setShowConfigModal(false);
-          setTestSessionConfig(config);
-          if (configModalBook) {
-            setSelectedBook(configModalBook);
-            setCurrentView('TESTING');
-            if (configModalBook.id) {
-              navigate(`/book/${configModalBook.id}/test?${buildConfigUrlParams(config)}`, { replace: true });
-            }
-          }
           setConfigModalBook(null);
         }}
       />

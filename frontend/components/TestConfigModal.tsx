@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, BookOpen, BrainCircuit, Timer, GraduationCap, CheckCircle, Tag, Loader2 } from 'lucide-react';
+import { X, BookOpen, BrainCircuit, Timer, Check, Tag, Loader2 } from 'lucide-react';
 import { BookDetails, TestSessionConfig } from '../types';
 import { fetchQuestionMetadata, QuestionMetadataResponse } from '../services/backendService';
 
@@ -42,7 +42,6 @@ interface TestConfigModalProps {
   book: BookDetails;
   isOpen: boolean;
   onClose: () => void;
-  onStartTest: (config: TestSessionConfig) => void;
 }
 
 const TEST_MODE_CONFIG = {
@@ -51,21 +50,20 @@ const TEST_MODE_CONFIG = {
   THOROUGH: { label: 'Thorough', targetQuestions: 24 }
 };
 
-export const TestConfigModal: React.FC<TestConfigModalProps> = ({ book, isOpen, onClose, onStartTest }) => {
+export const TestConfigModal: React.FC<TestConfigModalProps> = ({ book, isOpen, onClose }) => {
   // Return early if not open or no book
   if (!isOpen || !book) {
     return null;
   }
   
-  return <TestConfigModalContent book={book} onClose={onClose} onStartTest={onStartTest} />;
+  return <TestConfigModalContent book={book} onClose={onClose} />;
 };
 
 // Separate component to ensure book is always defined
 const TestConfigModalContent: React.FC<{
   book: BookDetails;
   onClose: () => void;
-  onStartTest: (config: TestSessionConfig) => void;
-}> = ({ book, onClose, onStartTest }) => {
+}> = ({ book, onClose }) => {
   // Load saved config on mount
   const savedConfig = book.id ? getSavedTestConfig(book.id) : defaultConfig;
   
@@ -175,27 +173,30 @@ const TestConfigModalContent: React.FC<{
     }
   };
 
-  const handleStart = () => {
-    // Build config
-    const config: TestSessionConfig = {
-      scope: scope === 'FULL' ? 'full' : scope === 'CHAPTER' ? 'chapters' : 'concepts',
-      chapters: scope === 'CHAPTER' && selectedChapters.length > 0 
-        ? selectedChapters.map(i => i + 1) 
-        : undefined,
-      concepts: scope === 'CONCEPTS' && selectedConcepts.length > 0 
-        ? selectedConcepts 
-        : undefined,
-      difficulty: [difficulty.toLowerCase() as 'basic' | 'medium' | 'deep' | 'mastery'],
-      length: TEST_MODE_CONFIG[testMode].targetQuestions,
-      mode: testMode === 'QUICK' ? 'Quick' : testMode === 'STANDARD' ? 'Standard' : 'Thorough'
-    };
+  // Build current config from state
+  const buildConfig = (): TestSessionConfig => ({
+    scope: scope === 'FULL' ? 'full' : scope === 'CHAPTER' ? 'chapters' : 'concepts',
+    chapters: scope === 'CHAPTER' && selectedChapters.length > 0 
+      ? selectedChapters.map(i => i + 1) 
+      : undefined,
+    concepts: scope === 'CONCEPTS' && selectedConcepts.length > 0 
+      ? selectedConcepts 
+      : undefined,
+    difficulty: [difficulty.toLowerCase() as 'basic' | 'medium' | 'deep' | 'mastery'],
+    length: TEST_MODE_CONFIG[testMode].targetQuestions,
+    mode: testMode === 'QUICK' ? 'Quick' : testMode === 'STANDARD' ? 'Standard' : 'Thorough'
+  });
 
-    // Save to localStorage
+  // Save config on every change
+  useEffect(() => {
     if (book.id) {
-      saveTestConfig(book.id, config);
+      saveTestConfig(book.id, buildConfig());
     }
+  }, [scope, selectedChapters, selectedConcepts, difficulty, testMode, book.id]);
 
-    onStartTest(config);
+  const handleDone = () => {
+    // Config is already saved via useEffect, just close
+    onClose();
   };
 
   return (
@@ -271,53 +272,55 @@ const TestConfigModalContent: React.FC<{
                   {selectedChapters.length === (questionMetadata?.availableChapters.length || book.chapters.length) ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
-              <div className="max-h-40 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+              <div className="max-h-52 overflow-y-auto p-1.5 custom-scrollbar">
                 {loadingMetadata ? (
                   <div className="flex items-center justify-center py-4 text-brand-cream/50">
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                     <span className="text-xs">Loading chapters...</span>
                   </div>
                 ) : (
-                  book.chapters.map((chap, idx) => {
-                    const isSelected = selectedChapters.includes(idx);
-                    const hasQuestions = chapterHasQuestions(idx);
-                    
-                    return (
-                      <button
-                        key={idx}
-                        onClick={(e) => handleChapterClick(idx, e)}
-                        disabled={!hasQuestions}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center justify-between group ${
-                          !hasQuestions
-                            ? 'opacity-40 cursor-not-allowed text-brand-cream/40 border border-transparent'
-                            : isSelected 
-                              ? 'bg-brand-orange/10 border border-brand-orange/30 text-white' 
-                              : 'text-brand-cream/70 border border-transparent hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 truncate">
-                          <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-0.5">
+                    {book.chapters.map((chap, idx) => {
+                      const isSelected = selectedChapters.includes(idx);
+                      const hasQuestions = chapterHasQuestions(idx);
+                      
+                      return (
+                        <button
+                          key={idx}
+                          onClick={(e) => handleChapterClick(idx, e)}
+                          disabled={!hasQuestions}
+                          className={`w-full text-left px-1.5 py-1 rounded-lg text-sm transition-all flex items-center justify-between group ${
                             !hasQuestions
-                              ? 'border-white/10 bg-white/5'
+                              ? 'opacity-40 cursor-not-allowed text-brand-cream/40 border border-transparent'
                               : isSelected 
-                                ? 'bg-brand-orange border-brand-orange' 
-                                : 'border-white/20'
-                          }`}>
-                            {isSelected && hasQuestions && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                                ? 'bg-brand-orange/10 border border-brand-orange/30 text-white' 
+                                : 'text-brand-cream/70 border border-transparent hover:bg-white/5 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <div className={`w-[18px] h-[18px] rounded flex items-center justify-center border transition-colors shrink-0 ${
+                              !hasQuestions
+                                ? 'border-white/10 bg-white/5'
+                                : isSelected 
+                                  ? 'bg-brand-orange border-brand-orange' 
+                                  : 'border-white/20'
+                            }`}>
+                              {isSelected && hasQuestions && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
+                            </div>
+                            <span className="truncate flex-1 text-left font-medium">
+                              <span className="font-mono text-xs opacity-50 mr-2">{idx + 1}.</span>
+                              {chap}
+                            </span>
                           </div>
-                          <span className="truncate flex-1 text-left">
-                            <span className="font-mono text-xs opacity-50 mr-2">{idx + 1}.</span>
-                            {chap}
-                          </span>
-                        </div>
-                        {!hasQuestions && (
-                          <span className="text-[10px] text-brand-cream/30 ml-2 shrink-0 italic">
-                            No questions
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })
+                          {!hasQuestions && (
+                            <span className="text-[10px] text-brand-cream/30 ml-2 shrink-0 italic">
+                              No questions
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
               <div className="p-2 bg-black/20 text-center border-t border-white/5">
@@ -340,26 +343,26 @@ const TestConfigModalContent: React.FC<{
                   {selectedConcepts.length === book.concepts.length ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
-              <div className="max-h-48 overflow-y-auto p-3 custom-scrollbar">
-                <div className="grid grid-cols-2 gap-2">
+              <div className="max-h-52 overflow-y-auto p-1.5 custom-scrollbar">
+                <div className="grid grid-cols-2 gap-0.5">
                   {book.concepts.map((concept) => {
                     const isSelected = selectedConcepts.includes(concept);
                     return (
                       <button
                         key={concept}
                         onClick={() => toggleConcept(concept)}
-                        className={`px-3 py-2.5 rounded-lg text-sm transition-all flex items-center gap-2.5 ${
+                        className={`px-1.5 py-1 rounded-lg text-sm transition-all flex items-center gap-2 ${
                           isSelected 
                             ? 'bg-brand-orange/10 border border-brand-orange/30 text-white' 
                             : 'text-brand-cream/70 border border-transparent hover:bg-white/5 hover:text-white'
                         }`}
                       >
-                        <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                        <div className={`w-[18px] h-[18px] rounded flex items-center justify-center border transition-colors shrink-0 ${
                           isSelected ? 'bg-brand-orange border-brand-orange' : 'border-white/20'
                         }`}>
                           {isSelected && <Tag className="w-3 h-3 text-white" />}
                         </div>
-                        <span className="truncate text-left">{concept}</span>
+                        <span className="truncate text-left font-medium">{concept}</span>
                       </button>
                     );
                   })}
@@ -413,11 +416,11 @@ const TestConfigModalContent: React.FC<{
         {/* Footer */}
         <div className="p-6 border-t border-white/10 bg-[#2a1d18]/30 shrink-0">
           <button 
-            onClick={handleStart}
+            onClick={handleDone}
             className="w-full bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
           >
-            <GraduationCap className="w-5 h-5" />
-            Start Test
+            <Check className="w-5 h-5" />
+            Done
           </button>
         </div>
       </div>
