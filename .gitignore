@@ -1,6 +1,12 @@
 sandbox
 cozy-library
 **/node_modules
+
+# Ignore markdown docs except READMEs
+*.md
+!README.md
+!**/README.md
+
 # SAM config with secrets
 backend/samconfig.toml
 
