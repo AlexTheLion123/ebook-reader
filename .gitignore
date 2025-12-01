@@ -1,5 +1,4 @@
 sandbox
-*.md
 cozy-library
 **/node_modules
 # SAM config with secrets
