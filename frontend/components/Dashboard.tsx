@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trophy, Flame, Target, BookOpen, TrendingUp, BrainCircuit, List, Zap, RefreshCw, ChevronUp, ChevronDown, ChevronsDown, ChevronsUp, Loader2 } from 'lucide-react';
+import { ArrowLeft, Trophy, Flame, Target, BookOpen, BrainCircuit, List, Zap, ChevronUp, ChevronDown, ChevronsDown, ChevronsUp, Loader2, Settings, PlayCircle } from 'lucide-react';
 import { BookProgress } from '../types';
 
 interface DashboardProps {
@@ -7,17 +7,26 @@ interface DashboardProps {
   loading?: boolean;
   onBack: () => void;
   onContinue: (bookTitle: string) => void;
+  /** Handler for instant start (one-tap quiz) */
+  onInstantStart?: (bookTitle: string) => void;
+  /** Handler to open full test setup modal */
+  onOpenTestSetup?: (bookTitle: string) => void;
+  /** Handler for continue reading */
+  onRead?: (bookTitle: string) => void;
 }
 
 interface ProgressCardProps {
   book: BookProgress;
   onContinue: (title: string) => void;
+  onInstantStart?: (title: string) => void;
+  onOpenTestSetup?: (title: string) => void;
+  onRead?: (title: string) => void;
   isExpanded: boolean;
   onToggle: () => void;
 }
 
 // Collapsible Progress Card Component
-const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, isExpanded, onToggle }) => {
+const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, onInstantStart, onOpenTestSetup, onRead, isExpanded, onToggle }) => {
   
   // Helper for concept color
   const getConceptColor = (score: number) => {
@@ -26,106 +35,97 @@ const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, isExpande
     return 'text-red-400 border-red-500/30 bg-red-500/10';
   };
 
-  const getMasteryColor = (score: number) => {
-    if (score >= 80) return 'text-green-400';
-    return 'text-brand-orange';
+  // Greyish Mastery Badge Style (subtle, not primary)
+  const getMasteryStyle = (percentage: number) => {
+    // Use a subtle grey/slate tone instead of red/orange
+    let bgOpacity = 0.15;
+    let borderOpacity = 0.2;
+    
+    if (percentage >= 90) { 
+      bgOpacity = 0.25; 
+      borderOpacity = 0.4; 
+    } else if (percentage >= 70) { 
+      bgOpacity = 0.20; 
+      borderOpacity = 0.3;
+    } else if (percentage >= 40) { 
+      bgOpacity = 0.18; 
+    }
+
+    return {
+      backgroundColor: `rgba(200, 200, 210, ${bgOpacity})`,
+      border: `1px solid rgba(200, 200, 210, ${borderOpacity})`,
+      color: 'rgba(220, 220, 230, 0.9)',
+      backdropFilter: 'blur(6px)',
+    };
   };
-  
-  const getProgressBarColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    return 'bg-brand-orange';
+
+  const handleInstantTest = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onInstantStart ? onInstantStart(book.bookTitle) : onContinue(book.bookTitle);
+  };
+
+  const handleCustomize = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onOpenTestSetup ? onOpenTestSetup(book.bookTitle) : onContinue(book.bookTitle);
+  };
+
+  const handleRead = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRead ? onRead(book.bookTitle) : onContinue(book.bookTitle);
   };
 
   return (
-    <div className="bg-[#1a110e]/80 rounded-2xl border border-white/5 overflow-hidden relative shadow-2xl animate-slide-up transition-all duration-300">
+    <div className="bg-[#1a110e]/80 rounded-2xl border border-white/5 overflow-hidden relative shadow-2xl animate-slide-up transition-all duration-300 group">
       
       {/* Header Row - Clickable Toggle */}
       <div 
-        className="p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between cursor-pointer hover:bg-white/5 transition-colors group gap-4 md:gap-0"
+        className="p-5 md:p-6 flex flex-col md:flex-row md:items-start justify-between cursor-pointer hover:bg-white/5 transition-colors gap-4 md:gap-0"
         onClick={onToggle}
       >
           {/* Top/Left Section: Chevron + Title/Info */}
-          <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto">
-             <div className={`shrink-0 transition-colors ${isExpanded ? 'text-white' : 'text-brand-cream/40 group-hover:text-white'}`}>
-               {isExpanded ? <ChevronUp className="w-6 h-6" /> : <ChevronDown className="w-6 h-6" />}
+          <div className="flex items-start gap-3 md:gap-4 w-full md:w-auto">
+             <div className={`mt-1 md:mt-1.5 shrink-0 transition-colors ${isExpanded ? 'text-white' : 'text-brand-cream/40 group-hover:text-white'}`}>
+               {isExpanded ? <ChevronUp className="w-5 h-5 md:w-6 md:h-6" /> : <ChevronDown className="w-5 h-5 md:w-6 md:h-6" />}
              </div>
 
-             <div className="flex items-center gap-3">
-                <BookOpen className="w-5 h-5 md:w-6 md:h-6 text-brand-orange shrink-0" />
-                <div>
-                  <h3 className="text-xl md:text-2xl font-bold text-white">
-                    {book.bookTitle}
-                  </h3>
-                  <p className="text-xs md:text-sm text-brand-cream/60">Last tested: {book.lastTestedDate}</p>
-                </div>
+             <div className="flex-1 min-w-0">
+                <h3 className="text-xl md:text-2xl font-bold text-white flex flex-wrap items-center gap-2 md:gap-3 mb-1">
+                  <span className="break-words leading-tight">{book.bookTitle}</span>
+                </h3>
+                {isExpanded && (
+                  <p className="text-xs md:text-sm text-brand-cream/60 animate-fade-in mb-2">Last tested: {book.lastTestedDate}</p>
+                )}
              </div>
           </div>
           
-          {/* Bottom/Right Section: Mastery Badge - HIDDEN ON MOBILE */}
-          <div className="hidden md:block w-auto">
-            <div className="relative overflow-hidden flex items-center justify-start gap-3 bg-black/40 px-4 py-2 rounded-xl border border-white/5 transition-transform group-hover:scale-105 w-auto">
-                <div className="text-right z-10">
-                  <div className={`text-2xl font-extrabold leading-none ${getMasteryColor(book.overallMastery)}`}>
-                      {book.overallMastery}%
-                  </div>
-                  <div className="text-[9px] font-bold text-brand-cream/40 uppercase tracking-widest mt-0.5">Mastery</div>
-                </div>
-                <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center z-10 ${book.overallMastery >= 80 ? 'border-green-500' : 'border-brand-orange'}`}>
-                  <TrendingUp className={`w-4 h-4 ${book.overallMastery >= 80 ? 'text-green-500' : 'text-brand-orange'}`} />
-                </div>
+          {/* Mastery Badge - Greyish pill style */}
+          <div className="w-auto self-start">
+            <div 
+              className="flex items-center justify-center min-w-[56px] h-[30px] px-2.5 rounded-full font-bold text-sm transition-all shadow-lg"
+              style={getMasteryStyle(book.overallMastery)}
+            >
+              {book.overallMastery}% Mastery
             </div>
           </div>
       </div>
 
       {/* Collapsible Content */}
-      <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[1200px] opacity-100' : 'max-h-0 opacity-0'}`}>
           
-          {/* Mobile Badge Section (Moved from Header) */}
-          <div className="md:hidden px-5 pt-2 pb-2">
-             <div className="relative overflow-hidden flex items-center justify-between gap-3 bg-black/40 px-4 py-3 rounded-xl border border-white/5 w-full">
-                <div className="text-left z-10">
-                  <div className={`text-xl font-extrabold leading-none ${getMasteryColor(book.overallMastery)}`}>
-                      {book.overallMastery}%
-                  </div>
-                  <div className="text-[9px] font-bold text-brand-cream/40 uppercase tracking-widest mt-0.5">Mastery</div>
-                </div>
-                <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center z-10 ${book.overallMastery >= 80 ? 'border-green-500' : 'border-brand-orange'}`}>
-                  <TrendingUp className={`w-4 h-4 ${book.overallMastery >= 80 ? 'text-green-500' : 'text-brand-orange'}`} />
-                </div>
-                {/* Mobile Integrated Progress Bar */}
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-white/5">
-                    <div 
-                      className={`h-full ${getProgressBarColor(book.overallMastery)}`} 
-                      style={{ width: `${book.overallMastery}%` }}
-                    />
-                </div>
-             </div>
-          </div>
-
-          {/* Desktop Progress Bar (Hidden on Mobile) */}
-          <div className="px-6 pb-2 hidden md:block">
-            <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
-                <div 
-                  className="h-full bg-gradient-to-r from-brand-orange to-red-500 rounded-full shadow-[0_0_15px_rgba(243,120,53,0.4)]"
-                  style={{ width: `${book.overallMastery}%` }}
-                />
-            </div>
-          </div>
-
-          <div className="p-4 sm:p-6 pt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="px-6 md:px-20 pb-8 pt-0 grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
             {/* Left Col: Concept Mastery */}
             <div>
-                <h4 className="text-xs font-bold text-brand-cream/40 uppercase tracking-widest mb-2 md:mb-4 flex items-center gap-2">
+                <h4 className="text-xs font-bold text-brand-cream/40 uppercase tracking-widest mb-4 flex items-center gap-2">
                   <BrainCircuit className="w-4 h-4" /> Concept Mastery
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
+                <div className="flex flex-wrap gap-2">
                   {book.concepts.map((concept) => (
                       <div 
                         key={concept.name}
-                        className={`px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between transition-all hover:scale-[1.02] cursor-default bg-black/20 ${getConceptColor(concept.score)}`}
+                        className={`px-3 py-1.5 rounded-full border text-xs font-bold flex items-center gap-2 transition-all cursor-default bg-black/20 ${getConceptColor(concept.score)}`}
                       >
-                        <span className="font-medium">{concept.name}</span>
-                        <span className="font-bold">{concept.score}%</span>
+                        <span>{concept.name}</span>
+                        <span>{concept.score}%</span>
                       </div>
                   ))}
                 </div>
@@ -133,58 +133,63 @@ const ProgressCard: React.FC<ProgressCardProps> = ({ book, onContinue, isExpande
 
             {/* Right Col: Chapter Map */}
             <div>
-                <h4 className="text-xs font-bold text-brand-cream/40 uppercase tracking-widest mb-2 md:mb-4 flex items-center gap-2">
+                <h4 className="text-xs font-bold text-brand-cream/40 uppercase tracking-widest mb-4 flex items-center gap-2">
                   <List className="w-4 h-4" /> Chapter Map
                 </h4>
-                <div className="bg-black/40 p-4 md:p-5 rounded-xl border border-white/5">
-                  <div className="flex flex-wrap gap-1.5 mb-4">
-                      {book.chapterBreakdown.map((chap) => {
-                        let color = 'bg-white/5 hover:bg-white/10'; // Untouched
-                        if (chap.status === 'MASTERED') color = 'bg-green-500 hover:bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.3)]';
-                        if (chap.status === 'IN_PROGRESS') color = 'bg-yellow-500 hover:bg-yellow-400 shadow-[0_0_6px_rgba(234,179,8,0.3)]';
-                        
-                        return (
-                            <div 
-                              key={chap.chapterIndex}
-                              className={`w-3 h-3 md:w-4 md:h-4 rounded-[2px] transition-all cursor-help ${color}`}
-                              title={`Chapter ${chap.chapterIndex + 1}: ${chap.status.replace('_', ' ')}`}
-                            ></div>
-                        );
-                      })}
-                  </div>
-                  <div className="flex gap-4 text-[9px] text-brand-cream/40 uppercase font-bold tracking-wider">
-                      <span className="flex items-center gap-1.5"><div className="w-2 h-2 bg-green-500 rounded-[1px]"></div> Mastered</span>
-                      <span className="flex items-center gap-1.5"><div className="w-2 h-2 bg-yellow-500 rounded-[1px]"></div> In Progress</span>
-                      <span className="flex items-center gap-1.5"><div className="w-2 h-2 bg-white/10 rounded-[1px]"></div> Untouched</span>
-                  </div>
+                <div className="flex flex-wrap gap-1.5">
+                    {book.chapterBreakdown.map((chap) => {
+                      let color = 'bg-white/5'; // Untouched
+                      if (chap.status === 'MASTERED') color = 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]';
+                      if (chap.status === 'IN_PROGRESS') color = 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.4)]';
+                      
+                      return (
+                          <div 
+                            key={chap.chapterIndex}
+                            className={`w-3 h-3 md:w-4 md:h-4 rounded-[2px] transition-all cursor-help ${color}`}
+                            title={`Chapter ${chap.chapterIndex + 1}: ${chap.status.replace('_', ' ')}`}
+                          ></div>
+                      );
+                    })}
                 </div>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="px-4 sm:px-6 pb-4 sm:pb-6 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-              <button 
-                onClick={(e) => { e.stopPropagation(); onContinue(book.bookTitle); }}
-                className="flex items-center justify-center gap-2 bg-brand-orange hover:bg-brand-darkOrange text-white text-sm sm:text-base font-bold py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl shadow-lg shadow-brand-orange/20 transition-all hover:-translate-y-0.5"
-              >
-                  <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
-                  Resume Course
-              </button>
-              
-              <button 
-                onClick={(e) => { e.stopPropagation(); onContinue(book.bookTitle); }}
-                className="flex items-center justify-center gap-2 bg-transparent hover:bg-white/5 text-brand-cream/80 text-sm sm:text-base font-bold py-3 sm:py-3.5 px-3 sm:px-4 rounded-xl border border-white/10 hover:border-white/20 transition-all hover:-translate-y-0.5"
-              >
-                  <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 opacity-60" />
-                  Review Weak Areas
-              </button>
+          {/* Smart Action Bar - Clean horizontal bar like cozy-library */}
+          <div className="p-4 md:p-6 bg-black/20 border-t border-white/5 flex flex-wrap items-center justify-between gap-4">
+             <div className="flex items-center gap-3 flex-1 md:flex-none">
+                 <button 
+                   onClick={handleRead}
+                   className="flex-1 md:flex-none bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-all hover:scale-[1.02] text-sm flex items-center justify-center gap-2 border border-white/5"
+                 >
+                    <PlayCircle className="w-4 h-4 fill-current text-brand-cream" />
+                    <span className="hidden sm:inline">Continue Reading</span>
+                    <span className="sm:hidden">Read</span>
+                 </button>
+
+                 <button 
+                   onClick={handleInstantTest}
+                   className="flex-1 md:flex-none bg-brand-orange hover:bg-brand-darkOrange text-white font-bold py-3 px-6 rounded-full shadow-lg shadow-brand-orange/20 transition-all hover:scale-[1.02] text-sm flex items-center justify-center gap-2"
+                 >
+                    <Zap className="w-4 h-4 fill-current" />
+                    <span className="hidden sm:inline">{book.overallMastery === 0 ? 'Test Yourself' : 'Continue Test'}</span>
+                    <span className="sm:hidden">Test</span>
+                 </button>
+             </div>
+
+             <button 
+                onClick={handleCustomize}
+                className="p-3 rounded-full text-brand-cream/60 hover:text-white hover:bg-white/10 transition-colors border border-transparent hover:border-white/5"
+                title="Customize Session"
+             >
+                <Settings className="w-5 h-5" />
+             </button>
           </div>
       </div>
     </div>
   );
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ progressData, loading, onBack, onContinue }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ progressData, loading, onBack, onContinue, onInstantStart, onOpenTestSetup, onRead }) => {
   // Show loading state while fetching active books
   if (loading) {
     return (
@@ -342,7 +347,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ progressData, loading, onB
                <ProgressCard 
                   key={idx} 
                   book={book} 
-                  onContinue={onContinue} 
+                  onContinue={onContinue}
+                  onInstantStart={onInstantStart}
+                  onOpenTestSetup={onOpenTestSetup}
+                  onRead={onRead}
                   isExpanded={expandedBooks.has(book.bookTitle)}
                   onToggle={() => toggleBook(book.bookTitle)}
                />

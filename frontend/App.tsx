@@ -78,6 +78,9 @@ function AppPage() {
   // Extract book/chapter from URL params if present
   const bookId = params.bookId;
   const chapterNumber = params.chapterNumber ? parseInt(params.chapterNumber) : undefined;
+  
+  // Check if this is a test route (URL ends with /test)
+  const isTestRoute = location.pathname.endsWith('/test');
 
   const handleRequestLogin = () => {
     navigate('/login');
@@ -89,6 +92,7 @@ function AppPage() {
         initialQuery={initialQuery} 
         initialBookId={bookId}
         initialChapter={chapterNumber}
+        initialView={isTestRoute ? 'testing' : undefined}
         onRequestLogin={handleRequestLogin}
       />
     </AppBackground>
@@ -173,6 +177,7 @@ function AppRoutes() {
       <Route path="/dashboard" element={<DashboardPage />} />
       <Route path="/book/:bookId" element={<AppPage />} />
       <Route path="/book/:bookId/chapter/:chapterNumber" element={<AppPage />} />
+      <Route path="/book/:bookId/test" element={<AppPage />} />
       
       {/* Fallback - redirect to landing */}
       <Route path="*" element={<LandingPage />} />

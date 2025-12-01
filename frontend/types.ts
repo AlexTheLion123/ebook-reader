@@ -160,6 +160,7 @@ export interface ChapterProgress {
 }
 
 export interface BookProgress {
+  bookId: string;
   bookTitle: string;
   overallMastery: number;
   chaptersMastered: number;
@@ -245,4 +246,27 @@ export interface ChapterStatsResponse {
     percentage: number;
     streak: number;
   };
+}
+
+// ============================================
+// Test Session Configuration (for instant start)
+// ============================================
+
+/**
+ * Configuration to start a test session with pre-filled options.
+ * Used for instant start (one-tap) to skip the config modal.
+ */
+export interface TestSessionConfig {
+  /** 'chapters' | 'concepts' | 'full' */
+  scope: Scope;
+  /** Array of 1-indexed chapter numbers (for scope='chapters') */
+  chapters?: number[];
+  /** Array of concept strings (for scope='concepts') */
+  concepts?: string[];
+  /** Difficulty levels to include */
+  difficulty: ('basic' | 'medium' | 'deep' | 'mastery')[];
+  /** Target number of questions (null = whatever is available for Quick mode) */
+  length: number | null;
+  /** Test mode - affects question selection */
+  mode: TestMode;
 }

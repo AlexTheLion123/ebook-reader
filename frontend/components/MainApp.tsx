@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Loader2, Bell, BookOpen, LayoutGrid, List } from 'lucide-react';
+import { Search, Loader2, BookOpen, LayoutGrid, List, Settings, Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { listBooks } from '../services/backendService';
-import { fetchChapterStats } from '../services/srsService';
+import { fetchChapterStats, fetchSrsBatch } from '../services/srsService';
 import { getUserActiveBooks } from '../services/userActiveBooksService';
-import { BookRecommendation, BookDetails, BookProgress, ChapterStatsResponse } from '../types';
+import { BookRecommendation, BookDetails, BookProgress, ChapterStatsResponse, TestSessionConfig } from '../types';
 import { BookCard } from './BookCard';
 import { BookDetail } from './BookDetail';
 import { ReaderView } from './ReaderView';
@@ -13,6 +13,7 @@ import { Dashboard } from './Dashboard';
 import { UserMenu } from './UserMenu';
 import { useAuth } from './AuthProvider';
 import { useToast, ToastContainer } from './Toast';
+import { TestConfigModal, getSavedTestConfig } from './TestConfigModal';
 
 interface MainAppProps {
   initialQuery?: string;
@@ -48,9 +49,11 @@ export const MainApp: React.FC<MainAppProps> = ({
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Initialize view based on URL params to avoid wrong loading state
   const getInitialView = (): AppView => {
+    if (initialView === 'testing' && initialBookId) return 'TESTING';
     if (initialChapter !== undefined) return 'READING';
     if (initialBookId) return 'DETAILS';
     if (initialView === 'dashboard') return 'DASHBOARD';
@@ -73,6 +76,37 @@ export const MainApp: React.FC<MainAppProps> = ({
   // Progress data for dashboard - fetched from SRS API for ACTIVE books only
   const [progressData, setProgressData] = useState<BookProgress[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(true); // Start true to show loading immediately
+
+  // Default test config - used when no specific config is set
+  const defaultTestConfig: TestSessionConfig = {
+    scope: 'chapters',
+    chapters: [1, 2, 3],
+    difficulty: ['medium'],
+    length: 12,
+    mode: 'Standard'
+  };
+
+  // Helper to build URL params from TestSessionConfig
+  const buildConfigUrlParams = (config: TestSessionConfig): string => {
+    const params = new URLSearchParams();
+    params.set('scope', config.scope);
+    if (config.chapters) params.set('chapters', config.chapters.join(','));
+    if (config.concepts) params.set('concepts', config.concepts.join(','));
+    params.set('difficulty', config.difficulty.join(','));
+    if (config.length) params.set('length', String(config.length));
+    params.set('mode', config.mode);
+    return params.toString();
+  };
+
+  // Test session config for instant start (ALWAYS has a value, never undefined)
+  const [testSessionConfig, setTestSessionConfig] = useState<TestSessionConfig>(defaultTestConfig);
+  
+  // First-time user tooltip state
+  const [showFirstTimeTooltip, setShowFirstTimeTooltip] = useState(false);
+  
+  // Config modal state (settings cog opens this)
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configModalBook, setConfigModalBook] = useState<BookDetails | null>(null);
 
   // Fetch progress data only for books in user's Active Courses
   const fetchProgressData = useCallback(async (bookList: BookRecommendation[]) => {
@@ -101,6 +135,7 @@ export const MainApp: React.FC<MainAppProps> = ({
           
           // Convert ChapterStatsResponse to BookProgress format
           const bookProgress: BookProgress = {
+            bookId: book.id!,
             bookTitle: book.title,
             overallMastery: stats.overall.percentage,
             chaptersMastered: stats.chapters.filter(c => c.status === 'mastered').length,
@@ -123,6 +158,7 @@ export const MainApp: React.FC<MainAppProps> = ({
           // Note: book.chapters may exist at runtime (added in fetchBooks) but isn't in BookRecommendation type
           const chapters = (book as any).chapters || [];
           progressResults.push({
+            bookId: book.id!,
             bookTitle: book.title,
             overallMastery: 0,
             chaptersMastered: 0,
@@ -197,7 +233,7 @@ export const MainApp: React.FC<MainAppProps> = ({
     
     const details: BookDetails = {
       ...book,
-      longDescription: "This is an uploaded textbook.",
+      longDescription: (book as any).description || "This is an uploaded textbook.",
       chapters: chapters,
       id: bookId, // Pass the bookId through to BookDetails
       concepts: concepts
@@ -209,6 +245,176 @@ export const MainApp: React.FC<MainAppProps> = ({
     if (!skipNavigation) {
       navigate(`/book/${bookId}`, { replace: true });
     }
+  };
+
+  // Quick Test from Library Card (applies toast + auto-add logic)
+  const handleQuickTest = async (book: BookRecommendation) => {
+    // For uploaded books, construct BookDetails directly
+    const bookId = (book as any).id;
+    const chapters = (book as any).chapters || [];
+    const concepts = (book as any).concepts || [];
+    const totalChapters = chapters.length;
+    
+    const details: BookDetails = {
+      ...book,
+      longDescription: (book as any).description || "This is an uploaded textbook.",
+      chapters: chapters,
+      id: bookId,
+      concepts: concepts
+    };
+    
+    setSelectedBook(details);
+    
+    // Set default test config (first 3 chapters for new users)
+    const safeChapters = [1, 2, 3].filter(c => c <= totalChapters);
+    const config: TestSessionConfig = {
+      scope: 'chapters',
+      chapters: safeChapters,
+      difficulty: ['medium'],
+      length: 12,
+      mode: 'Standard'
+    };
+    
+    setTestSessionConfig(config);
+    setCurrentView('TESTING');
+    
+    // Update URL with config params
+    if (bookId) {
+      navigate(`/book/${bookId}/test?${buildConfigUrlParams(config)}`, { replace: true });
+    }
+  };
+
+  /**
+   * Instant Start: One-tap test with smart defaults (2025 gold standard UX)
+   * - First time user: Chapters 1-3 to avoid spoilers
+   * - Returning user with due cards: Quick mode (due cards only)
+   * - Returning user nothing due: Standard mode from ch 1 to last-read + 2
+   */
+  const handleInstantStart = async (book: BookRecommendation | BookDetails, progress?: BookProgress | null) => {
+    const bookId = (book as any).id;
+    const chapters = (book as any).chapters || [];
+    const totalChapters = chapters.length;
+    
+    // Construct BookDetails if needed
+    const details: BookDetails = 'longDescription' in book ? book : {
+      ...book,
+      longDescription: "This is an uploaded textbook.",
+      chapters: chapters,
+      id: bookId,
+      concepts: (book as any).concepts || []
+    };
+    
+    setSelectedBook(details);
+    
+    // Determine if this is first time testing this book
+    const isFirstTime = !progress || progress.overallMastery === 0;
+    
+    if (isFirstTime) {
+      // First time: safe chapters 1-3, no spoilers
+      const safeChapters = [1, 2, 3].filter(c => c <= totalChapters);
+      
+      const config: TestSessionConfig = {
+        scope: 'chapters',
+        chapters: safeChapters,
+        difficulty: ['medium'],
+        length: 12,
+        mode: 'Standard'
+      };
+      
+      setTestSessionConfig(config);
+      setCurrentView('TESTING');
+      
+      // Show first-time tooltip (only once per browser)
+      const hasSeenTooltip = localStorage.getItem('quickbook-first-test-tooltip');
+      if (!hasSeenTooltip) {
+        setShowFirstTimeTooltip(true);
+        localStorage.setItem('quickbook-first-test-tooltip', 'true');
+        // Auto-hide after 4 seconds
+        setTimeout(() => setShowFirstTimeTooltip(false), 4000);
+      }
+      
+      if (bookId) navigate(`/book/${bookId}/test?${buildConfigUrlParams(config)}`, { replace: true });
+      return;
+    }
+    
+    // Returning user: check for due cards
+    try {
+      if (bookId) {
+        // Fetch SRS batch in Quick mode to check due count
+        const quickCheck = await fetchSrsBatch({
+          bookId,
+          mode: 'Quick',
+          scope: 'full',
+          difficulty: ['basic', 'medium', 'deep', 'mastery']
+        });
+        
+        const dueToday = quickCheck.metadata.totalDueToday;
+        
+        if (dueToday > 0) {
+          // Has due cards → instant Quick review
+          const config: TestSessionConfig = {
+            scope: 'full',
+            difficulty: ['basic', 'medium', 'deep', 'mastery'],
+            length: null, // Whatever is due
+            mode: 'Quick'
+          };
+          
+          setTestSessionConfig(config);
+          setCurrentView('TESTING');
+          if (bookId) navigate(`/book/${bookId}/test?${buildConfigUrlParams(config)}`, { replace: true });
+          return;
+        }
+      }
+    } catch (error) {
+      console.debug('Could not check due cards, falling back to standard mode');
+    }
+    
+    // Nothing due → continue where they left off
+    // Calculate last read chapter from progress
+    let lastReadChapter = 3;
+    if (progress?.chapterBreakdown) {
+      const inProgressOrMastered = progress.chapterBreakdown
+        .filter(c => c.status === 'IN_PROGRESS' || c.status === 'MASTERED')
+        .map(c => c.chapterIndex + 1); // Convert to 1-indexed
+      if (inProgressOrMastered.length > 0) {
+        lastReadChapter = Math.max(...inProgressOrMastered);
+      }
+    }
+    
+    const nextScopeEnd = Math.min(lastReadChapter + 2, totalChapters);
+    const chapterRange = Array.from({ length: nextScopeEnd }, (_, i) => i + 1);
+    
+    const config: TestSessionConfig = {
+      scope: 'chapters',
+      chapters: chapterRange,
+      difficulty: ['basic', 'medium', 'deep'], // Mixed difficulty for returning users
+      length: 12,
+      mode: 'Standard'
+    };
+    
+    setTestSessionConfig(config);
+    setCurrentView('TESTING');
+    if (bookId) navigate(`/book/${bookId}/test?${buildConfigUrlParams(config)}`, { replace: true });
+  };
+
+  /**
+   * Open test config modal (gear button click)
+   * This is a true modal overlay - doesn't change view or URL
+   */
+  const handleOpenTestSetup = (book: BookRecommendation | BookDetails) => {
+    const bookId = (book as any).id;
+    const chapters = (book as any).chapters || [];
+    
+    const details: BookDetails = 'longDescription' in book ? book : {
+      ...book,
+      longDescription: (book as any).description || "This is an uploaded textbook.",
+      chapters: chapters,
+      id: bookId,
+      concepts: (book as any).concepts || []
+    };
+    
+    setConfigModalBook(details);
+    setShowConfigModal(true);
   };
 
   const handleStartReading = (chapterIndex: number) => {
@@ -251,9 +457,10 @@ export const MainApp: React.FC<MainAppProps> = ({
     if (initialBookId && books.length > 0 && !selectedBook) {
       const book = books.find(b => b.id === initialBookId);
       if (book) {
-        // For deep linking to a chapter, we need to load book details but NOT change view to DETAILS
-        // The view should stay as READING (set by getInitialView)
+        // For deep linking to a chapter or test, we need to load book details but NOT change view to DETAILS
+        // The view should stay as READING or TESTING (set by getInitialView)
         const isChapterDeepLink = initialChapter !== undefined;
+        const isTestDeepLink = initialView === 'testing';
         
         // Load book details without changing view
         const bookId = (book as any).id;
@@ -262,7 +469,7 @@ export const MainApp: React.FC<MainAppProps> = ({
         
         const details: BookDetails = {
           ...book,
-          longDescription: "This is an uploaded textbook.",
+          longDescription: (book as any).description || "This is an uploaded textbook.",
           chapters: chapters,
           id: bookId,
           concepts: concepts
@@ -270,15 +477,14 @@ export const MainApp: React.FC<MainAppProps> = ({
         
         setSelectedBook(details);
         
-        // Only set view to DETAILS if NOT a chapter deep link
-        if (!isChapterDeepLink) {
+        // Only set view to DETAILS if NOT a chapter or test deep link
+        if (!isChapterDeepLink && !isTestDeepLink) {
           setCurrentView('DETAILS');
         }
-        // If it IS a chapter deep link, the view is already READING from getInitialView
-        // Just ensure the chapter index is set (already initialized in useState)
+        // If it IS a chapter/test deep link, the view is already set from getInitialView
       }
     }
-  }, [initialBookId, initialChapter, books.length]);
+  }, [initialBookId, initialChapter, initialView, books.length]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -338,10 +544,30 @@ export const MainApp: React.FC<MainAppProps> = ({
   // Render Test Suite Overlay (Hides Navbar)
   if (currentView === 'TESTING' && selectedBook) {
     return (
-      <TestSuite 
-        book={selectedBook} 
-        onClose={() => setCurrentView('DETAILS')} 
-      />
+      <>
+        <TestSuite 
+          book={selectedBook} 
+          onClose={() => {
+            setTestSessionConfig(defaultTestConfig);
+            setCurrentView('DETAILS');
+          }}
+          initialConfig={testSessionConfig}
+        />
+        {/* First-time tooltip */}
+        {showFirstTimeTooltip && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
+            <div className="bg-green-600/90 backdrop-blur-sm text-white px-5 py-3 rounded-xl shadow-lg shadow-green-500/30 flex items-center gap-2 text-sm font-medium">
+              <span>We'll start with the first three chapters to avoid spoilers ✓</span>
+              <button 
+                onClick={() => setShowFirstTimeTooltip(false)}
+                className="ml-2 opacity-70 hover:opacity-100"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -349,25 +575,20 @@ export const MainApp: React.FC<MainAppProps> = ({
     // Removed bg-gradient here because the background is now handled in App.tsx with the image
     <div className="min-h-screen w-full bg-transparent text-brand-cream overflow-y-auto">
       {/* Top Navigation Bar */}
-      <nav className="sticky top-0 z-40 w-full px-6 md:px-12 py-6 flex items-center justify-between bg-[#5D4037]/60 backdrop-blur-lg border-b border-white/10">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={handleNavHome}>
-          <div className="bg-brand-orange p-2 rounded-lg shadow-lg shadow-brand-orange/20">
-             <BookOpen className="w-6 h-6 text-white" />
+      <nav className="sticky top-0 z-40 w-full px-4 md:px-12 py-3 md:py-4 flex items-center justify-between bg-[#5D4037]/60 backdrop-blur-lg border-b border-white/10">
+        <div className="flex items-center gap-2 md:gap-3 cursor-pointer" onClick={handleNavHome}>
+          <div className="bg-brand-orange p-1.5 md:p-2 rounded-lg shadow-lg shadow-brand-orange/20">
+             <BookOpen className="w-5 h-5 md:w-6 md:h-6 text-white" />
           </div>
-          <span className="text-2xl font-bold tracking-tight text-white">QuickBook</span>
+          <span className="text-xl md:text-2xl font-bold tracking-tight text-white">QuickBook</span>
         </div>
 
         <div className="hidden md:flex items-center gap-8 font-medium text-brand-cream/90">
           <button onClick={handleNavHome} className={`hover:text-brand-orange transition-colors shadow-sm ${currentView === 'HOME' ? 'text-white font-bold' : ''}`}>Library</button>
           <button onClick={handleNavDashboard} className={`hover:text-brand-orange transition-colors shadow-sm ${currentView === 'DASHBOARD' ? 'text-white font-bold' : ''}`}>My Dashboard</button>
-          <a href="#" className="hover:text-brand-orange transition-colors">About Us</a>
         </div>
 
-        <div className="flex items-center gap-4">
-          <button className="p-2 hover:bg-white/10 rounded-full transition-colors relative">
-            <Bell className="w-5 h-5 text-white" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-brand-orange rounded-full border-2 border-[#5D4037]"></span>
-          </button>
+        <div className="flex items-center gap-2 md:gap-4">
           {isAuthenticated ? (
             <UserMenu />
           ) : (
@@ -378,8 +599,35 @@ export const MainApp: React.FC<MainAppProps> = ({
               <span className="text-sm font-medium hidden sm:block text-white">Sign In</span>
             </button>
           )}
+          {/* Mobile hamburger menu */}
+          <button 
+            className="md:hidden p-2 hover:bg-white/10 rounded-lg transition-colors"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5 text-white" /> : <Menu className="w-5 h-5 text-white" />}
+          </button>
         </div>
       </nav>
+
+      {/* Mobile Menu Dropdown */}
+      {mobileMenuOpen && (
+        <div className="md:hidden sticky top-[52px] z-30 bg-[#5D4037]/95 backdrop-blur-lg border-b border-white/10">
+          <div className="flex flex-col px-4 py-3 gap-2">
+            <button 
+              onClick={() => { handleNavHome(); setMobileMenuOpen(false); }} 
+              className={`text-left px-4 py-2 rounded-lg transition-colors ${currentView === 'HOME' ? 'bg-brand-orange/20 text-white font-bold' : 'text-brand-cream/90 hover:bg-white/10'}`}
+            >
+              Library
+            </button>
+            <button 
+              onClick={() => { handleNavDashboard(); setMobileMenuOpen(false); }} 
+              className={`text-left px-4 py-2 rounded-lg transition-colors ${currentView === 'DASHBOARD' ? 'bg-brand-orange/20 text-white font-bold' : 'text-brand-cream/90 hover:bg-white/10'}`}
+            >
+              My Dashboard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="px-4 md:px-12 py-6 md:py-10 max-w-7xl mx-auto">
@@ -395,15 +643,141 @@ export const MainApp: React.FC<MainAppProps> = ({
               setCurrentView('HOME');
               fetchBooks(bookTitle);
             }}
+            onInstantStart={async (bookTitle) => {
+              // Find progress data which contains bookId
+              const progress = progressData.find(p => p.bookTitle === bookTitle);
+              if (progress?.bookId) {
+                // Construct BookDetails from progress data
+                const details: BookDetails = {
+                  id: progress.bookId,
+                  title: progress.bookTitle,
+                  author: '',
+                  description: '',
+                  rating: 0,
+                  longDescription: '',
+                  chapters: progress.chapterBreakdown.map((_, i) => `Chapter ${i + 1}`),
+                  concepts: progress.concepts.map(c => c.name)
+                };
+                
+                // Determine smart config based on progress
+                const totalChapters = progress.chapterBreakdown.length;
+                const isFirstTime = progress.overallMastery === 0;
+                
+                // Default config (will be overridden if needed)
+                let config: TestSessionConfig = {
+                  scope: 'chapters',
+                  chapters: [1, 2, 3].filter(c => c <= totalChapters),
+                  difficulty: ['medium'],
+                  length: 12,
+                  mode: 'Standard'
+                };
+                
+                if (!isFirstTime) {
+                  // Returning user: try Quick mode if due cards exist
+                  try {
+                    const quickCheck = await fetchSrsBatch({
+                      bookId: progress.bookId,
+                      mode: 'Quick',
+                      scope: 'full',
+                      difficulty: ['basic', 'medium', 'deep', 'mastery']
+                    });
+                    if (quickCheck.metadata.totalDueToday > 0) {
+                      config = {
+                        scope: 'full',
+                        difficulty: ['basic', 'medium', 'deep', 'mastery'],
+                        length: null,
+                        mode: 'Quick'
+                      };
+                    } else {
+                      // No due cards - continue where they left off
+                      let lastReadChapter = 3;
+                      const inProgressOrMastered = progress.chapterBreakdown
+                        .filter(c => c.status === 'IN_PROGRESS' || c.status === 'MASTERED')
+                        .map(c => c.chapterIndex + 1);
+                      if (inProgressOrMastered.length > 0) {
+                        lastReadChapter = Math.max(...inProgressOrMastered);
+                      }
+                      const nextScopeEnd = Math.min(lastReadChapter + 2, totalChapters);
+                      const chapterRange = Array.from({ length: nextScopeEnd }, (_, i) => i + 1);
+                      
+                      config = {
+                        scope: 'chapters',
+                        chapters: chapterRange,
+                        difficulty: ['basic', 'medium', 'deep'],
+                        length: 12,
+                        mode: 'Standard'
+                      };
+                    }
+                  } catch {
+                    // Fallback on error - use default config set above
+                  }
+                }
+                
+                // Set config FIRST, then navigate - pass config in URL params
+                setSelectedBook(details);
+                setTestSessionConfig(config);
+                setCurrentView('TESTING');
+                
+                navigate(`/book/${progress.bookId}/test?${buildConfigUrlParams(config)}`, { replace: true });
+              }
+            }}
+            onOpenTestSetup={(bookTitle) => {
+              // Find progress data which contains bookId
+              const progress = progressData.find(p => p.bookTitle === bookTitle);
+              if (progress?.bookId) {
+                const bookInfo = {
+                  id: progress.bookId,
+                  title: progress.bookTitle,
+                  author: '',
+                  description: '',
+                  chapters: progress.chapterBreakdown.map((c, i) => ({ title: `Chapter ${i + 1}` })),
+                  concepts: progress.concepts.map(c => c.name)
+                };
+                handleOpenTestSetup(bookInfo as any);
+              }
+            }}
+            onRead={(bookTitle) => {
+              // Find progress data which contains bookId
+              const progress = progressData.find(p => p.bookTitle === bookTitle);
+              if (progress?.bookId) {
+                const details: BookDetails = {
+                  id: progress.bookId,
+                  title: progress.bookTitle,
+                  author: '',
+                  description: '',
+                  rating: 0,
+                  longDescription: '',
+                  chapters: progress.chapterBreakdown.map((c, i) => `Chapter ${i + 1}`),
+                  concepts: progress.concepts.map(c => c.name)
+                };
+                
+                setSelectedBook(details);
+                setCurrentView('READING');
+              }
+            }}
           />
         ) : currentView === 'DETAILS' && selectedBook ? (
           // DETAIL VIEW
           <BookDetail 
             book={selectedBook} 
             progress={progressData.find(p => p.bookTitle === selectedBook.title) || null}
+            loadingProgress={loadingProgress}
             onBack={handleNavHome} 
             onRead={handleStartReading}
-            onTest={() => setCurrentView('TESTING')}
+            onTest={() => {
+              // Use saved config from localStorage
+              const savedConfig = selectedBook.id ? getSavedTestConfig(selectedBook.id) : defaultTestConfig;
+              setTestSessionConfig(savedConfig);
+              setCurrentView('TESTING');
+              if (selectedBook.id) {
+                navigate(`/book/${selectedBook.id}/test?${buildConfigUrlParams(savedConfig)}`, { replace: true });
+              }
+            }}
+            onInstantStart={() => {
+              const progress = progressData.find(p => p.bookTitle === selectedBook.title) || null;
+              handleInstantStart(selectedBook, progress);
+            }}
+            onOpenTestSetup={() => handleOpenTestSetup(selectedBook)}
             showSuccess={showSuccess}
             showError={showError}
           />
@@ -502,18 +876,15 @@ export const MainApp: React.FC<MainAppProps> = ({
                   ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' 
                   : 'grid-cols-1 gap-3'
               }`}>
-                {books.map((book, idx) => {
-                  const bookProgress = progressData.find(p => p.bookTitle === book.title);
-                  return (
-                    <BookCard 
-                      key={idx} 
-                      book={book} 
-                      onClick={handleBookClick} 
-                      viewMode={viewMode}
-                      mastery={bookProgress?.overallMastery}
-                    />
-                  );
-                })}
+                {books.map((book, idx) => (
+                  <BookCard 
+                    key={idx} 
+                    book={book} 
+                    onClick={handleBookClick} 
+                    onTest={handleQuickTest}
+                    viewMode={viewMode}
+                  />
+                ))}
                 {books.length === 0 && hasSearched && (
                    <div className="col-span-full text-center py-20 text-white/60">
                       No books found. Try a different search term.
@@ -527,6 +898,28 @@ export const MainApp: React.FC<MainAppProps> = ({
       
       {/* Toast container - persists across view changes */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+      
+      {/* Test Config Modal - settings cog opens this */}
+      <TestConfigModal
+        book={configModalBook!}
+        isOpen={showConfigModal && !!configModalBook}
+        onClose={() => {
+          setShowConfigModal(false);
+          setConfigModalBook(null);
+        }}
+        onStartTest={(config) => {
+          setShowConfigModal(false);
+          setTestSessionConfig(config);
+          if (configModalBook) {
+            setSelectedBook(configModalBook);
+            setCurrentView('TESTING');
+            if (configModalBook.id) {
+              navigate(`/book/${configModalBook.id}/test?${buildConfigUrlParams(config)}`, { replace: true });
+            }
+          }
+          setConfigModalBook(null);
+        }}
+      />
     </div>
   );
 };

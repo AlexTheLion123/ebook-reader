@@ -185,7 +185,7 @@ export const RATING_CONFIG: Record<SrsRating, {
     hoverColor: 'hover:bg-orange-500/30',
   },
   Good: {
-    label: 'Good',
+    label: 'Decently',
     description: 'Got it',
     color: '#22c55e', // green-500
     bgColor: 'bg-green-500/20',

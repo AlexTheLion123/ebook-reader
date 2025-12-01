@@ -1,19 +1,54 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag, Lightbulb, Loader2, RotateCcw, ThumbsDown, ThumbsUp, Zap } from 'lucide-react';
-import { BookDetails, Question, QuestionType, AssessmentQuestion, QuestionHint, SrsRating, TestMode, AssessmentQuestionWithSrs } from '../types';
+import { BookDetails, Question, QuestionType, AssessmentQuestion, QuestionHint, SrsRating, TestMode, AssessmentQuestionWithSrs, TestSessionConfig } from '../types';
 import { HintSidebar } from './HintSidebar';
 import { fetchQuestions, evaluateAnswer, fetchQuestionMetadata, QuestionMetadataResponse } from '../services/backendService';
 import { fetchSrsBatch, submitSrsAnswer, RATING_CONFIG } from '../services/srsService';
 
+// Helper to parse config from URL params
+function parseConfigFromUrl(searchParams: URLSearchParams): TestSessionConfig | null {
+  const scope = searchParams.get('scope');
+  if (!scope) return null;
+  
+  const chaptersStr = searchParams.get('chapters');
+  const conceptsStr = searchParams.get('concepts');
+  const difficultyStr = searchParams.get('difficulty');
+  const lengthStr = searchParams.get('length');
+  const mode = searchParams.get('mode');
+  
+  return {
+    scope: scope as 'full' | 'chapters' | 'concepts',
+    chapters: chaptersStr ? chaptersStr.split(',').map(Number) : undefined,
+    concepts: conceptsStr ? conceptsStr.split(',') : undefined,
+    difficulty: difficultyStr ? difficultyStr.split(',') as ('basic' | 'medium' | 'deep' | 'mastery')[] : ['medium'],
+    length: lengthStr ? Number(lengthStr) : null,
+    mode: (mode as 'Quick' | 'Standard' | 'Thorough') || 'Standard'
+  };
+}
+
 interface TestSuiteProps {
   book: BookDetails;
   onClose: () => void;
+  /** Config for the test session */
+  initialConfig: TestSessionConfig;
 }
 
-type TestStep = 'CONFIG' | 'LOADING' | 'QUIZ' | 'RESULTS';
+type TestStep = 'LOADING' | 'QUIZ' | 'RESULTS';
 
-export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
-  const [step, setStep] = useState<TestStep>('CONFIG');
+export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose, initialConfig }) => {
+  // Read config from URL params (this is the source of truth)
+  const [searchParams] = useSearchParams();
+  const urlConfig = parseConfigFromUrl(searchParams);
+  
+  // Track if we've already started loading to prevent re-triggers
+  const hasStartedLoading = useRef(false);
+  
+  // Use URL config if available, otherwise fall back to prop
+  const effectiveConfig = urlConfig || initialConfig;
+  
+  // Always start loading immediately (config is handled by TestConfigModal)
+  const [step, setStep] = useState<TestStep>('LOADING');
   
   // Config State
   const [scope, setScope] = useState<'FULL' | 'CHAPTER' | 'CONCEPTS'>('FULL');
@@ -39,6 +74,51 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   // Question Metadata State (which chapters have questions)
   const [questionMetadata, setQuestionMetadata] = useState<QuestionMetadataResponse | null>(null);
   const [loadingMetadata, setLoadingMetadata] = useState(true);
+
+  // Serialize URL params to a stable string for dependency comparison
+  const urlParamsString = searchParams.toString();
+
+  // Auto-start effect - load questions when URL config is present (runs only once)
+  useEffect(() => {
+    // Only run if we have URL config and haven't started loading yet
+    if (!urlConfig || hasStartedLoading.current) return;
+    
+    hasStartedLoading.current = true;
+    
+    // Initialize state from URL config
+    const scopeMap: Record<string, 'FULL' | 'CHAPTER' | 'CONCEPTS'> = {
+      'full': 'FULL',
+      'chapters': 'CHAPTER',
+      'concepts': 'CONCEPTS'
+    };
+    setScope(scopeMap[urlConfig.scope] || 'FULL');
+    
+    if (urlConfig.chapters) {
+      setSelectedChapters(urlConfig.chapters.map(c => c - 1));
+    }
+    if (urlConfig.concepts) {
+      setSelectedConcepts(urlConfig.concepts);
+    }
+    
+    const diffMap: Record<string, 'BASIC' | 'MEDIUM' | 'DEEP' | 'MASTERY'> = {
+      'basic': 'BASIC',
+      'medium': 'MEDIUM',
+      'deep': 'DEEP',
+      'mastery': 'MASTERY'
+    };
+    setDifficulty(diffMap[urlConfig.difficulty[0]] || 'MEDIUM');
+    
+    const modeMap: Record<string, 'QUICK' | 'STANDARD' | 'THOROUGH'> = {
+      'Quick': 'QUICK',
+      'Standard': 'STANDARD',
+      'Thorough': 'THOROUGH'
+    };
+    setTestMode(modeMap[urlConfig.mode] || 'STANDARD');
+    
+    // Start loading questions
+    setStep('LOADING');
+    loadQuestionsFromConfig(urlConfig);
+  }, [urlParamsString, book.id]); // Only depend on URL string and book ID
 
   // Fetch question metadata on mount to know which chapters have questions
   useEffect(() => {
@@ -197,6 +277,55 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
       setSelectedConcepts([]);
     } else {
       setSelectedConcepts([...book.concepts]);
+    }
+  };
+
+  // Load questions directly from a TestSessionConfig (for instant start)
+  const loadQuestionsFromConfig = async (config: TestSessionConfig) => {
+    if (!book.id) {
+      setLoadError('Book ID not available');
+      return;
+    }
+
+    setLoadingQuestions(true);
+    setLoadError(null);
+    setAllCaughtUp(false);
+
+    try {
+      const response = await fetchSrsBatch({
+        bookId: book.id,
+        mode: config.mode,
+        scope: config.scope,
+        chapters: config.chapters,
+        concepts: config.concepts,
+        difficulty: config.difficulty,
+      });
+
+      // Check if all caught up (no questions to review)
+      if (response.questions.length === 0) {
+        if (config.mode === 'Quick') {
+          // Quick mode: no due cards = all caught up!
+          setAllCaughtUp(true);
+          setLoadingQuestions(false);
+          setStep('QUIZ'); // Show the "all caught up" message
+          return;
+        } else {
+          setLoadError('No questions available for the selected criteria.');
+          setLoadingQuestions(false);
+          return;
+        }
+      }
+
+      // Map SRS response to our question format
+      setQuestions(response.questions);
+      setSrsDueCount(response.metadata.totalDueToday);
+      setSrsNewCount(response.metadata.newToday);
+      setLoadingQuestions(false);
+      setStep('QUIZ');
+    } catch (error) {
+      console.error('Failed to load questions:', error);
+      setLoadError('Failed to load questions. Please try again.');
+      setLoadingQuestions(false);
     }
   };
 
@@ -434,8 +563,8 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   const renderConfig = () => {
     try {
       return (
-    <div className="w-full max-w-2xl max-h-[90vh] bg-[#3E2723] rounded-2xl shadow-2xl border border-[#A1887F]/30 overflow-hidden relative z-10 animate-slide-up my-auto flex flex-col">
-       <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#2a1d18]/50 shrink-0">
+    <div className="w-full max-w-2xl max-h-[90vh] bg-[#3E2723]/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-[#A1887F]/30 overflow-hidden relative z-10 animate-slide-up my-auto flex flex-col">
+       <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#2a1d18]/30 shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-brand-orange/20 p-2 rounded-lg">
               <BrainCircuit className="w-6 h-6 text-brand-orange" />
@@ -472,7 +601,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                 <div className="font-bold text-base leading-tight">Full Book</div>
                 <div className="text-xs opacity-70 mt-1">
                   {questionMetadata 
-                    ? `${questionMetadata.availableChapters.length} chapters · ${questionMetadata.totalQuestions} questions`
+                    ? `${questionMetadata.availableChapters.length} chapters`
                     : 'Review all.'
                   }
                 </div>
@@ -518,7 +647,6 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                 book.chapters.map((chap, idx) => {
                   const isSelected = selectedChapters.includes(idx);
                   const hasQuestions = chapterHasQuestions(idx);
-                  const questionCount = getChapterQuestionCount(idx);
                   
                   return (
                     <button
@@ -548,11 +676,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                           {chap}
                         </span>
                       </div>
-                      {hasQuestions ? (
-                        <span className="text-[10px] text-brand-cream/40 ml-2 shrink-0">
-                          {questionCount} Q
-                        </span>
-                      ) : (
+                      {!hasQuestions && (
                         <span className="text-[10px] text-brand-cream/30 ml-2 shrink-0 italic">
                           No questions
                         </span>
@@ -565,7 +689,6 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
             <div className="p-2 bg-black/20 text-center border-t border-white/5">
                 <span className="text-[10px] text-brand-cream/40">
                    {selectedChapters.length} of {questionMetadata?.availableChapters.length || book.chapters.length} chapters selected
-                   {questionMetadata && ` (${questionMetadata.totalQuestions} questions available)`}
                 </span>
             </div>
           </div>
@@ -820,10 +943,10 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
     }
 
     return (
-    <div className="w-full max-w-4xl mx-auto flex flex-col h-full animate-fade-in">
+    <div className="w-full max-w-4xl mx-auto flex flex-col h-full animate-fade-in overflow-hidden">
       
       {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 custom-scrollbar overflow-x-hidden">
           
           {/* Progress Section */}
           <div className="mb-6 md:mb-10 w-full max-w-3xl mx-auto">
@@ -862,7 +985,6 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                     {currentQuestion.tags.difficulty}
                   </span>
                 )}
-                <span className="hidden md:inline-block text-[10px] font-bold px-2 py-0.5 bg-white/5 rounded text-brand-cream/40 border border-white/5 tracking-wider">{currentModeConfig.label}</span>
                 <div className="flex items-center gap-1.5 text-xs font-mono bg-black/30 px-2 py-1 rounded">
                   <Timer className="w-3 h-3 text-brand-orange" />
                   <span>{formatTime(elapsedTime)}</span>
@@ -887,13 +1009,13 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                   </div>
                 )}
                 
-                <h3 className="text-xl md:text-3xl lg:text-4xl font-bold text-white mb-6 md:mb-8 leading-snug drop-shadow-sm">
+                <h3 className="text-lg md:text-xl lg:text-2xl font-bold text-white mb-4 md:mb-5 leading-snug">
                     {currentQuestion.text}
                 </h3>
 
                 {/* Hints Section - Show before answer is checked */}
                 {!isAnswerChecked && currentHints.length > 0 && (
-                  <div className="mb-6 space-y-2">
+                  <div className="mb-4 space-y-2">
                     {/* Revealed hints */}
                     {currentHints.slice(0, revealedHintIndex + 1).map((hint, idx) => (
                       <div 
@@ -904,7 +1026,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                           <Lightbulb className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
                           <div>
                             <span className="text-xs text-yellow-400/70 uppercase tracking-wider font-bold">
-                              Hint {idx + 1} ({hint.level})
+                              Hint {idx + 1}
                             </span>
                             <p className="text-sm text-brand-cream/90 mt-1">{hint.text}</p>
                           </div>
@@ -928,10 +1050,10 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                 )}
 
                 {/* Answer Area */}
-                <div className="space-y-3 md:space-y-4 w-full">
+                <div className="space-y-2 md:space-y-2.5 w-full">
                 {(currentQuestion.type === 'MCQ' || currentQuestion.type === 'TRUE_FALSE') && currentQuestion.options?.map((option, idx) => {
                     const isSelected = selectedOption === option;
-                    let buttonClass = "w-full p-4 md:p-6 rounded-2xl border text-left transition-all relative overflow-hidden group flex items-center justify-between ";
+                    let buttonClass = "w-full p-3 md:p-4 rounded-xl border text-left transition-all relative overflow-hidden group flex items-center justify-between ";
                     
                     if (isAnswerChecked) {
                         if (option === currentQuestion.correctAnswer) {
@@ -939,13 +1061,13 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                         } else if (isSelected) {
                             buttonClass += "bg-red-500/10 border-red-500/50 text-white";
                         } else {
-                            buttonClass += "bg-black/20 border-white/5 opacity-40";
+                            buttonClass += "bg-black/30 border-white/5 text-brand-cream/40";
                         }
                     } else {
                         if (isSelected) {
                             buttonClass += "bg-brand-orange text-white border-brand-orange shadow-lg transform scale-[1.01]";
                         } else {
-                            buttonClass += "bg-black/20 border-white/10 text-brand-cream/80 hover:bg-white/5 hover:border-white/20 hover:text-white";
+                            buttonClass += "bg-black/40 border-white/20 text-brand-cream/90 hover:bg-black/50 hover:border-white/30 hover:text-white";
                         }
                     }
 
@@ -956,27 +1078,27 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                         disabled={isAnswerChecked}
                         className={buttonClass}
                     >
-                        <span className="font-medium text-base md:text-lg leading-snug">{option}</span>
+                        <span className="font-medium text-sm md:text-base leading-snug">{option}</span>
                         {isAnswerChecked && option === currentQuestion.correctAnswer && (
-                            <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-green-400 shrink-0 ml-4" />
+                            <CheckCircle className="w-4 h-4 md:w-5 md:h-5 text-green-400 shrink-0 ml-3" />
                         )}
                         {isAnswerChecked && isSelected && option !== currentQuestion.correctAnswer && (
-                            <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-red-400 shrink-0 ml-4" />
+                            <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-400 shrink-0 ml-3" />
                         )}
                     </button>
                     );
                 })}
 
-                {(currentQuestion.type === 'SHORT_ANSWER' || currentQuestion.type === 'FILL_BLANK') && (
-                    <div className="relative">
+                {(currentQuestion.type === 'SHORT_ANSWER' || currentQuestion.type === 'FILL_BLANK' || currentQuestion.type === 'BRIEF_RESPONSE') && (
+                    <div className="relative flex-1">
                     <textarea
                         value={textAnswer}
                         onChange={(e) => setTextAnswer(e.target.value)}
                         disabled={isAnswerChecked}
                         placeholder="Type your answer here..."
-                        className={`w-full bg-black/20 border rounded-2xl p-4 md:p-6 text-white text-lg md:text-xl focus:outline-none focus:ring-2 min-h-[140px] md:min-h-[160px] transition-colors resize-none ${
+                        className={`w-full h-full bg-black/20 border rounded-2xl p-4 md:p-6 text-white text-lg md:text-xl focus:outline-none focus:ring-2 min-h-[250px] md:min-h-[320px] lg:min-h-[400px] transition-colors resize-none ${
                         isAnswerChecked 
-                        ? textAnswer.toLowerCase().includes(currentQuestion.correctAnswer.toLowerCase()) 
+                        ? (answers[answers.length - 1]?.correct)
                             ? 'border-green-500/50 focus:ring-green-500/50' 
                             : 'border-red-500/50 focus:ring-red-500/50'
                         : 'border-white/10 focus:border-brand-orange/50 focus:ring-brand-orange/20'
@@ -1030,18 +1152,18 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
       </div>
 
       {/* Sticky Footer Actions */}
-      <div className="p-4 md:p-6 border-t border-white/5 bg-[#1a110e] w-full z-30 shrink-0 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.5)]">
+      <div className="p-3 md:p-4 border-t border-white/5 bg-[#1a110e] w-full z-30 shrink-0 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.5)]">
         <div className="max-w-3xl mx-auto">
             {!isAnswerChecked ? (
               <div className="flex justify-end">
                 <button 
                     onClick={handleCheckAnswer}
                     disabled={(!selectedOption && !textAnswer) || isEvaluating}
-                    className="w-full md:w-auto px-6 md:px-10 py-3 md:py-4 bg-white text-[#3E2723] font-bold text-base md:text-lg rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:bg-brand-cream transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:-translate-y-0.5"
+                    className="w-full md:w-auto px-5 md:px-8 py-2.5 md:py-3 bg-white text-[#3E2723] font-bold text-sm md:text-base rounded-lg shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:bg-brand-cream transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:-translate-y-0.5"
                 >
                     {isEvaluating ? (
                       <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                         Evaluating...
                       </>
                     ) : (
@@ -1050,45 +1172,77 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
                 </button>
               </div>
             ) : useSrs ? (
-              // SRS Rating Buttons
-              <div className="space-y-3">
-                <p className="text-center text-xs text-brand-cream/50 uppercase tracking-wider font-bold">
-                  How well did you know this?
-                </p>
-                <div className="grid grid-cols-4 gap-2 md:gap-3">
-                  {(['Again', 'Hard', 'Good', 'Easy'] as SrsRating[]).map((rating) => {
-                    const config = RATING_CONFIG[rating];
-                    const Icon = rating === 'Again' ? RotateCcw 
-                      : rating === 'Hard' ? ThumbsDown 
-                      : rating === 'Good' ? ThumbsUp 
-                      : Zap;
-                    
-                    return (
-                      <button
-                        key={rating}
-                        onClick={() => handleRatingSelect(rating)}
+              // SRS Rating Buttons - only show if answer was correct (wrong answers show Next button)
+              (() => {
+                const lastAnswer = answers[answers.length - 1];
+                const wasCorrect = lastAnswer?.correct;
+                
+                // If wrong, show Next button instead of rating buttons
+                if (!wasCorrect) {
+                  return (
+                    <div className="flex justify-end">
+                      <button 
+                        onClick={() => handleRatingSelect('Again')}
                         disabled={isSubmittingRating}
-                        className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border transition-all hover:scale-[1.02] disabled:opacity-50 ${
-                          selectedRating === rating 
-                            ? `${config.bgColor} border-current` 
-                            : 'bg-black/20 border-white/10 hover:bg-white/5'
-                        }`}
-                        style={{ color: config.color }}
+                        className="w-full md:w-auto px-5 md:px-8 py-2.5 md:py-3 bg-white text-[#3E2723] font-bold text-sm md:text-base rounded-lg shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:bg-brand-cream transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:-translate-y-0.5"
                       >
-                        <Icon className="w-5 h-5 md:w-6 md:h-6" />
-                        <span className="font-bold text-sm">{config.label}</span>
-                        <span className="text-[10px] opacity-70">{config.description}</span>
+                        {isSubmittingRating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            Next
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                        )}
                       </button>
-                    );
-                  })}
-                </div>
-                {isSubmittingRating && (
-                  <div className="flex items-center justify-center gap-2 text-brand-cream/60 text-sm">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Saving progress...
+                    </div>
+                  );
+                }
+                
+                // Show rating buttons only for correct answers
+                return (
+                  <div className="space-y-2">
+                    <p className="text-center text-xs text-brand-cream/50 uppercase tracking-wider font-bold">
+                      How well did you know this?
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {(['Again', 'Hard', 'Good', 'Easy'] as SrsRating[]).map((rating) => {
+                        const config = RATING_CONFIG[rating];
+                        const Icon = rating === 'Again' ? RotateCcw 
+                          : rating === 'Hard' ? ThumbsDown 
+                          : rating === 'Good' ? ThumbsUp 
+                          : Zap;
+                        
+                        return (
+                          <button
+                            key={rating}
+                            onClick={() => handleRatingSelect(rating)}
+                            disabled={isSubmittingRating}
+                            className={`flex flex-col items-center gap-1 p-2 md:p-2.5 rounded-lg border transition-all hover:scale-[1.02] disabled:opacity-50 ${
+                              selectedRating === rating 
+                                ? `${config.bgColor} border-current` 
+                                : 'bg-black/20 border-white/10 hover:bg-white/5'
+                            }`}
+                            style={{ color: config.color }}
+                          >
+                            <Icon className="w-4 h-4 md:w-5 md:h-5" />
+                            <span className="font-bold text-xs">{config.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {isSubmittingRating && (
+                      <div className="flex items-center justify-center gap-2 text-brand-cream/60 text-sm">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Saving...
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()
             ) : (
               // Legacy non-SRS mode - just Next button
               <div className="flex justify-end">
@@ -1273,18 +1427,14 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#1a110e] flex flex-col animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col animate-fade-in">
        
        {/* Global Background Elements */}
        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-brand-orange/5 rounded-full blur-[120px] pointer-events-none"></div>
        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-brand-brown/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-       {step === 'CONFIG' ? (
-           <div className="flex-1 flex flex-col items-center justify-center p-4 bg-black/60 backdrop-blur-md relative z-10 overflow-y-auto">
-              {renderConfig()}
-           </div>
-       ) : step === 'LOADING' ? (
-           <div className="flex-1 flex flex-col items-center justify-center p-4 bg-black/60 backdrop-blur-md relative z-10">
+       {step === 'LOADING' ? (
+           <div className="flex-1 flex flex-col items-center justify-center p-4 relative z-10">
               {renderLoading()}
            </div>
        ) : (

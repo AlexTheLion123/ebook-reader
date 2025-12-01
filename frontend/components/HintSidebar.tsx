@@ -206,12 +206,12 @@ export const HintSidebar: React.FC<HintSidebarProps> = ({
                     <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed animate-fade-in ${
                         msg.role === 'user' 
                         ? 'bg-brand-orange text-white rounded-tr-none shadow-lg' 
-                        : 'bg-[#3E2723] text-brand-cream border border-[#A1887F]/20 rounded-tl-none whitespace-pre-wrap'
+                        : 'bg-[#3E2723] text-brand-cream border border-[#A1887F]/20 rounded-tl-none'
                     }`}>
                         {msg.role === 'ai' ? <ReactMarkdown components={{
-                           p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
-                           ul: ({children}) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
-                           li: ({children}) => <li className="mb-1">{children}</li>,
+                           p: ({children}) => <p className="mb-3 last:mb-0">{children}</p>,
+                           ul: ({children}) => <ul className="list-disc ml-4 mb-3">{children}</ul>,
+                           li: ({children}) => <li className="mb-1.5 [&>p]:mb-0">{children}</li>,
                            strong: ({children}) => <span className="font-bold text-brand-orange/90">{children}</span>
                         }}>{msg.text}</ReactMarkdown> : msg.text}
                     </div>
