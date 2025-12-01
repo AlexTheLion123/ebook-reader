@@ -14,6 +14,7 @@ import { UserMenu } from './UserMenu';
 import { useAuth } from './AuthProvider';
 import { useToast, ToastContainer } from './Toast';
 import { TestConfigModal, getSavedTestConfig } from './TestConfigModal';
+import { AuthRequiredModal } from './AuthRequiredModal';
 
 interface MainAppProps {
   initialQuery?: string;
@@ -107,6 +108,9 @@ export const MainApp: React.FC<MainAppProps> = ({
   // Config modal state (settings cog opens this)
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [configModalBook, setConfigModalBook] = useState<BookDetails | null>(null);
+
+  // Auth required modal state (shown when unauthenticated user tries to test)
+  const [showAuthRequiredModal, setShowAuthRequiredModal] = useState(false);
 
   // Fetch progress data only for books in user's Active Courses
   const fetchProgressData = useCallback(async (bookList: BookRecommendation[]) => {
@@ -252,6 +256,12 @@ export const MainApp: React.FC<MainAppProps> = ({
 
   // Quick Test from Library Card (applies toast + auto-add logic)
   const handleQuickTest = async (book: BookRecommendation) => {
+    // Check if user is authenticated first
+    if (!isAuthenticated) {
+      setShowAuthRequiredModal(true);
+      return;
+    }
+    
     // For uploaded books, construct BookDetails directly
     const bookId = (book as any).id;
     const chapters = (book as any).chapters || [];
@@ -294,6 +304,12 @@ export const MainApp: React.FC<MainAppProps> = ({
    * - Returning user nothing due: Standard mode from ch 1 to last-read + 2
    */
   const handleInstantStart = async (book: BookRecommendation | BookDetails, progress?: BookProgress | null) => {
+    // Check if user is authenticated first
+    if (!isAuthenticated) {
+      setShowAuthRequiredModal(true);
+      return;
+    }
+    
     const bookId = (book as any).id;
     const chapters = (book as any).chapters || [];
     const totalChapters = chapters.length;
@@ -405,6 +421,12 @@ export const MainApp: React.FC<MainAppProps> = ({
    * This is a true modal overlay - doesn't change view or URL
    */
   const handleOpenTestSetup = (book: BookRecommendation | BookDetails) => {
+    // Check if user is authenticated first
+    if (!isAuthenticated) {
+      setShowAuthRequiredModal(true);
+      return;
+    }
+    
     const bookId = (book as any).id;
     const chapters = (book as any).chapters || [];
     
@@ -647,6 +669,10 @@ export const MainApp: React.FC<MainAppProps> = ({
               fetchBooks(bookTitle);
             }}
             onInstantStart={async (bookTitle) => {
+              if (!isAuthenticated) {
+                setShowAuthRequiredModal(true);
+                return;
+              }
               // Find progress data which contains bookId
               const progress = progressData.find(p => p.bookTitle === bookTitle);
               if (progress?.bookId) {
@@ -785,6 +811,11 @@ export const MainApp: React.FC<MainAppProps> = ({
             onBack={handleNavHome} 
             onRead={handleStartReading}
             onTest={() => {
+              // Check if user is authenticated first
+              if (!isAuthenticated) {
+                setShowAuthRequiredModal(true);
+                return;
+              }
               // Use saved config from localStorage
               const savedConfig = selectedBook.id ? getSavedTestConfig(selectedBook.id) : defaultTestConfig;
               setTestSessionConfig(savedConfig);
@@ -927,6 +958,13 @@ export const MainApp: React.FC<MainAppProps> = ({
           setShowConfigModal(false);
           setConfigModalBook(null);
         }}
+      />
+      
+      {/* Auth Required Modal - shown when unauthenticated user tries to test */}
+      <AuthRequiredModal
+        isOpen={showAuthRequiredModal}
+        onClose={() => setShowAuthRequiredModal(false)}
+        onSignIn={handleRequestLogin}
       />
     </div>
   );

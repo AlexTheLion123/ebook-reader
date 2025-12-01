@@ -1,5 +1,7 @@
 # QuickBook 📚
 
+**QuickBook is a study app for textbooks.** Read books, test yourself with AI-generated questions, and actually remember what you read. A built-in AI tutor answers your questions using only the book's content—no spoilers, no hallucinations.
+
 > **The first AI-native eBook reader that combines a full-text reader with a literature-specific spaced-repetition system and a book-grounded AI assistant.**
 
 <div align="center">

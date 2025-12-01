@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag, Lightbulb, Loader2, RotateCcw, ThumbsDown, ThumbsUp, Zap } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { X, CheckCircle, AlertCircle, Trophy, ArrowRight, BrainCircuit, BookOpen, BarChart2, Timer, GraduationCap, Target, RefreshCw, ArrowLeft, HelpCircle, Tag, Lightbulb, Loader2, RotateCcw, ThumbsDown, ThumbsUp, Zap, LogIn } from 'lucide-react';
 import { BookDetails, Question, QuestionType, AssessmentQuestion, QuestionHint, SrsRating, TestMode, AssessmentQuestionWithSrs, TestSessionConfig } from '../types';
 import { HintSidebar } from './HintSidebar';
 import { fetchQuestions, evaluateAnswer, fetchQuestionMetadata, QuestionMetadataResponse } from '../services/backendService';
 import { fetchSrsBatch, submitSrsAnswer, RATING_CONFIG } from '../services/srsService';
+import { useAuth } from './AuthProvider';
 
 // Helper to parse config from URL params
 function parseConfigFromUrl(searchParams: URLSearchParams): TestSessionConfig | null {
@@ -34,9 +35,13 @@ interface TestSuiteProps {
   initialConfig: TestSessionConfig;
 }
 
-type TestStep = 'LOADING' | 'QUIZ' | 'RESULTS';
+type TestStep = 'LOADING' | 'QUIZ' | 'RESULTS' | 'AUTH_REQUIRED';
 
 export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose, initialConfig }) => {
+  // Auth hook
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  
   // Read config from URL params (this is the source of truth)
   const [searchParams] = useSearchParams();
   const urlConfig = parseConfigFromUrl(searchParams);
@@ -85,6 +90,12 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose, initialConf
     
     hasStartedLoading.current = true;
     
+    // Check authentication first - tests require login
+    if (!isAuthenticated) {
+      setStep('AUTH_REQUIRED');
+      return;
+    }
+    
     // Initialize state from URL config
     const scopeMap: Record<string, 'FULL' | 'CHAPTER' | 'CONCEPTS'> = {
       'full': 'FULL',
@@ -118,7 +129,7 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose, initialConf
     // Start loading questions
     setStep('LOADING');
     loadQuestionsFromConfig(urlConfig);
-  }, [urlParamsString, book.id]); // Only depend on URL string and book ID
+  }, [urlParamsString, book.id, isAuthenticated]); // Only depend on URL string, book ID, and auth state
 
   // Fetch question metadata on mount to know which chapters have questions
   useEffect(() => {
@@ -322,8 +333,14 @@ export const TestSuite: React.FC<TestSuiteProps> = ({ book, onClose, initialConf
       setSrsNewCount(response.metadata.newToday);
       setLoadingQuestions(false);
       setStep('QUIZ');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load questions:', error);
+      // Check if it's an authentication error
+      if (error?.message?.includes('401') || error?.message?.includes('Unauthorized') || error?.message?.toLowerCase().includes('unauthorized')) {
+        setStep('AUTH_REQUIRED');
+        setLoadingQuestions(false);
+        return;
+      }
       setLoadError('Failed to load questions. Please try again.');
       setLoadingQuestions(false);
     }
