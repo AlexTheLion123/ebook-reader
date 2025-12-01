@@ -2,6 +2,14 @@
 
 > **The first AI-native eBook reader that combines a full-text reader with a literature-specific spaced-repetition system and a book-grounded AI assistant.**
 
+<div align="center">
+
+### 🚀 [Try it Live](https://main.d12hmt15z4iuqe.amplifyapp.com/app/)
+
+**Note:** Sign in required for testing and AI tutor features
+
+</div>
+
 [![AWS](https://img.shields.io/badge/AWS-Serverless-orange?logo=amazon-aws)](https://aws.amazon.com/serverless/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18-61dafb?logo=react)](https://reactjs.org/)
