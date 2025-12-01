@@ -16,26 +16,28 @@ const defaultConfig: TestSessionConfig = {
   mode: 'Standard'
 };
 
-// Get saved config from localStorage
+// Save config to localStorage
+const saveTestConfig = (bookId: string, config: TestSessionConfig) => {
+  try {
+    localStorage.setItem(getStorageKey(bookId), JSON.stringify(config));
+  } catch (e) {
+    console.error('Failed to save test config:', e);
+  }
+};
+
+// Get saved config from localStorage (auto-saves defaults if none exists)
 export const getSavedTestConfig = (bookId: string): TestSessionConfig => {
   try {
     const saved = localStorage.getItem(getStorageKey(bookId));
     if (saved) {
       return JSON.parse(saved);
     }
+    // No config saved - save defaults and return them
+    saveTestConfig(bookId, defaultConfig);
   } catch (e) {
     console.error('Failed to load test config:', e);
   }
   return defaultConfig;
-};
-
-// Save config to localStorage
-export const saveTestConfig = (bookId: string, config: TestSessionConfig) => {
-  try {
-    localStorage.setItem(getStorageKey(bookId), JSON.stringify(config));
-  } catch (e) {
-    console.error('Failed to save test config:', e);
-  }
 };
 
 interface TestConfigModalProps {
