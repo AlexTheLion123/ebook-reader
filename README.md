@@ -1,3 +1,5 @@
+For evidence of Amazon-q usage refer to the [amazon-q-usage folder](https://github.com/AlexTheLion123/ebook-reader/tree/main/amazon-q-usage) above
+
 # QuickBook 📚
 
 **QuickBook is a study app for textbooks.** Read books, test yourself with AI-generated questions, and actually remember what you read. A built-in AI tutor answers your questions using only the book's content—no spoilers, no hallucinations.
