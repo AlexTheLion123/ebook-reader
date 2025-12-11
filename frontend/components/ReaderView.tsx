@@ -339,6 +339,14 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
                 </button>
               </div>
             </div>
+          ) : book.sourceFormat === 'html' ? (
+            // Render raw HTML content in an iframe (for math papers, etc.)
+            <iframe
+              srcDoc={content}
+              className="w-full flex-1 border-0 rounded-sm bg-white"
+              style={{ minHeight: '80vh' }}
+              title={`${book.title} - ${book.chapters[currentChapterIndex]}`}
+            />
           ) : (
             <div className="animate-fade-in font-serif prose max-w-none flex-1">
               <h2 className="text-2xl sm:text-3xl font-bold text-brand-darkBrown mb-8 text-center border-b-2 border-brand-brown/20 pb-6">

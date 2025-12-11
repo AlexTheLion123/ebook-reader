@@ -1,5 +1,6 @@
 sandbox
 cozy-library
+maths
 **/node_modules
 
 # Ignore markdown docs except READMEs

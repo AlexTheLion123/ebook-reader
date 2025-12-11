@@ -216,7 +216,8 @@ export const MainApp: React.FC<MainAppProps> = ({
           rating: 5.0,
           id: id,
           chapters: chapterTitles,
-          concepts: b.concepts || []
+          concepts: b.concepts || [],
+          sourceFormat: b.sourceFormat // Pass through for rendering hints (html = iframe)
         } as any;
       });
 
@@ -237,13 +238,15 @@ export const MainApp: React.FC<MainAppProps> = ({
     const bookId = (book as any).id;
     const chapters = (book as any).chapters || [];
     const concepts = (book as any).concepts || [];
+    const sourceFormat = (book as any).sourceFormat;
     
     const details: BookDetails = {
       ...book,
       longDescription: (book as any).description || "This is an uploaded textbook.",
       chapters: chapters,
       id: bookId, // Pass the bookId through to BookDetails
-      concepts: concepts
+      concepts: concepts,
+      sourceFormat: sourceFormat
     };
     
     setSelectedBook(details);
@@ -266,6 +269,7 @@ export const MainApp: React.FC<MainAppProps> = ({
     const bookId = (book as any).id;
     const chapters = (book as any).chapters || [];
     const concepts = (book as any).concepts || [];
+    const sourceFormat = (book as any).sourceFormat;
     const totalChapters = chapters.length;
     
     const details: BookDetails = {
@@ -273,7 +277,8 @@ export const MainApp: React.FC<MainAppProps> = ({
       longDescription: (book as any).description || "This is an uploaded textbook.",
       chapters: chapters,
       id: bookId,
-      concepts: concepts
+      concepts: concepts,
+      sourceFormat: sourceFormat
     };
     
     setSelectedBook(details);

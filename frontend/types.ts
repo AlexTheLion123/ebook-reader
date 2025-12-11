@@ -11,6 +11,7 @@ export interface BookDetails extends BookRecommendation {
   chapters: string[];
   id?: string;
   concepts?: string[]; // Optional array of testable concepts (themes, motifs, symbols, etc.)
+  sourceFormat?: 'epub' | 'html' | 'tex'; // Rendering hint - 'html' means render as-is in iframe
 }
 
 export enum SearchStatus {
@@ -78,6 +79,7 @@ export interface Book {
   chapters?: string[];
   chapterCount?: number;
   concepts?: string[];
+  sourceFormat?: 'epub' | 'html' | 'tex'; // Rendering hint - 'html' means render as-is in iframe
 }
 
 export interface BookListResponse {
