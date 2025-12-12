@@ -130,9 +130,22 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       };
     }
 
-    // Build the mode-aware message
+    // Get book title for context
+    let bookTitle = '';
+    if (bookId) {
+      try {
+        const { getItem } = await import('../utils/dynamodb');
+        const bookMeta = await getItem(process.env.CONTENT_TABLE!, { PK: `book#${bookId}`, SK: 'metadata' });
+        bookTitle = bookMeta?.title || '';
+      } catch (e) {
+        console.error('Failed to fetch book title:', e);
+      }
+    }
+
+    // Build the mode-aware message with book context
     const modeBlock = buildModeBlock(quizContext as QuizModeContext | undefined);
-    const enhancedMessage = `${modeBlock}\n\n---\nUser message: ${message}`;
+    const bookContext = bookTitle ? `\n\n<<CONTEXT>>\nYou are tutoring "${bookTitle}"` : '';
+    const enhancedMessage = `${modeBlock}${bookContext}\n\n---\nUser message: ${message}`;
 
     const agentId = process.env.AGENT_ID!;
     const agentAliasId = process.env.AGENT_ALIAS_ID!;

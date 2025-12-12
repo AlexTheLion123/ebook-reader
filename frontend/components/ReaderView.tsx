@@ -304,8 +304,43 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
       {/* Content Area */}
       <div 
         ref={contentRef}
-        className="flex-1 overflow-y-auto scroll-smooth p-6 md:p-12 relative"
+        className={`flex-1 overflow-y-auto scroll-smooth relative ${
+          book.sourceFormat === 'html' ? '' : 'p-6 md:p-12'
+        }`}
       >
+        {book.sourceFormat === 'html' ? (
+          // Render raw HTML content in an iframe - full width for math papers
+          loading ? (
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <Loader2 className="w-10 h-10 text-brand-cream animate-spin" />
+              <p className="text-brand-cream/70 font-serif italic">Loading content...</p>
+            </div>
+          ) : !content ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center animate-fade-in">
+              <div className="p-4 rounded-full mb-4 bg-red-500/10">
+                <AlertTriangle className="w-8 h-8 text-red-400" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold mb-2 text-brand-cream/90">
+                Content Unavailable
+              </h3>
+              <p className="text-sm sm:text-base max-w-md mx-auto leading-relaxed text-brand-cream/70 mb-6">
+                We couldn't load the text for this chapter. Please check your connection and try again.
+              </p>
+              <button 
+                className="px-6 py-2 rounded-full font-bold text-sm transition-colors bg-white/10 hover:bg-white/20 text-brand-cream"
+                onClick={() => window.location.reload()}
+              >
+                Reload Page
+              </button>
+            </div>
+          ) : (
+            <iframe
+              srcDoc={content}
+              className="w-full h-full border-0 bg-white"
+              title={`${book.title} - ${book.chapters[currentChapterIndex]}`}
+            />
+          )
+        ) : (
         <div 
           className={`max-w-3xl mx-auto p-8 md:p-16 rounded-sm shadow-2xl min-h-[80vh] transition-colors duration-500 ${
             isNightMode 
@@ -339,14 +374,6 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
                 </button>
               </div>
             </div>
-          ) : book.sourceFormat === 'html' ? (
-            // Render raw HTML content in an iframe (for math papers, etc.)
-            <iframe
-              srcDoc={content}
-              className="w-full flex-1 border-0 rounded-sm bg-white"
-              style={{ minHeight: '80vh' }}
-              title={`${book.title} - ${book.chapters[currentChapterIndex]}`}
-            />
           ) : (
             <div className="animate-fade-in font-serif prose max-w-none flex-1">
               <h2 className="text-2xl sm:text-3xl font-bold text-brand-darkBrown mb-8 text-center border-b-2 border-brand-brown/20 pb-6">
@@ -359,6 +386,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({ book, initialChapterInde
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Chapter Navigation Sidebar (Left) */}

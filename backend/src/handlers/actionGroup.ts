@@ -20,6 +20,7 @@ const s3Client = new S3Client({ region: process.env.AWS_REGION || 'eu-west-1' })
 const CONTENT_TABLE = process.env.CONTENT_TABLE!;
 const PROGRESS_TABLE = process.env.PROGRESS_TABLE!;
 const BOOKS_BUCKET = process.env.BOOKS_BUCKET!;
+const KB_PREFIX = 'knowledge-base/';
 
 /**
  * Bedrock Agent action group event format
@@ -278,6 +279,57 @@ ${content.slice(0, 30000)}`;
 }
 
 /**
+ * Get exam question(s) by number from S3
+ * Supports hierarchical queries: "6" returns all q6-*.md, "6.1" returns q6-1.md
+ * Uses bookId from session to determine which exam paper
+ */
+async function getExamQuestion(bookId: string, questionNumber: string): Promise<string> {
+  try {
+    // Convert question number to S3 key pattern: "6.1" -> "q6-1", "1.1.1" -> "q1-1-1"
+    const pattern = `q${questionNumber.replace(/\./g, '-')}`;
+    // Files are directly in knowledge-base/{bookId}/ (not in chunks-final/)
+    const prefix = `${KB_PREFIX}${bookId}/${pattern}`;
+    
+    console.log(`Fetching exam questions with prefix: ${prefix}`);
+    
+    // List all matching files
+    const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+    const listResult = await s3Client.send(new ListObjectsV2Command({
+      Bucket: BOOKS_BUCKET,
+      Prefix: prefix
+    }));
+    
+    if (!listResult.Contents || listResult.Contents.length === 0) {
+      return JSON.stringify({
+        error: `No questions found for ${questionNumber} in book ${bookId}`,
+        searchedPrefix: prefix
+      });
+    }
+    
+    // Fetch all matching question files
+    const questions = await Promise.all(
+      listResult.Contents.map(async (obj) => {
+        const result = await s3Client.send(new GetObjectCommand({
+          Bucket: BOOKS_BUCKET,
+          Key: obj.Key!
+        }));
+        return await result.Body?.transformToString('utf-8');
+      })
+    );
+    
+    // Return concatenated content
+    return questions.filter(q => q).join('\n\n---\n\n');
+    
+  } catch (error) {
+    console.error('Error fetching exam question:', error);
+    return JSON.stringify({
+      error: `Failed to fetch question ${questionNumber}`,
+      details: String(error)
+    });
+  }
+}
+
+/**
  * Get student's learning summary
  */
 async function getLearningSummary(userId: string, bookId: string): Promise<string> {
@@ -365,6 +417,12 @@ export const handler = async (event: ActionGroupEvent): Promise<ActionGroupRespo
       case 'getChapterSummary': {
         const chapterNumber = parseInt(getParam(event, 'chapterNumber') || '1');
         responseBody = await getChapterSummary(bookId, chapterNumber);
+        break;
+      }
+      
+      case 'getExamQuestion': {
+        const questionNumber = getParam(event, 'questionNumber') || '';
+        responseBody = await getExamQuestion(bookId, questionNumber);
         break;
       }
       

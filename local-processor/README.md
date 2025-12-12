@@ -119,3 +119,20 @@ Defaults (override with environment variables):
   "latexContent": "\\chapter{...}..."
 }
 ```
+
+---
+
+## Math Past Papers Processing
+
+For processing math past papers (PDFs with formulas), see the `maths/` folder.
+
+**One command to process a PDF:**
+
+```bash
+cd maths
+./process-paper.sh ~/Downloads/Mathematics-P2-Nov-2024.pdf
+```
+
+This extracts formulas with Claude Sonnet 4.5, outputs markdown + HTML with KaTeX rendering.
+
+See `.amazonq/rules/math-tutor.md` for full documentation.

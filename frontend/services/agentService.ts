@@ -101,10 +101,12 @@ function saveSession(session: SessionState): void {
 }
 
 /**
- * Clear session for a book
+ * Clear session for a book and create a fresh one
  */
 export function clearSession(bookId: string): void {
   localStorage.removeItem(`${SESSION_STORAGE_KEY}_${bookId}`);
+  // Force creation of new session with new sessionId
+  getSession(bookId);
 }
 
 /**
@@ -175,18 +177,23 @@ export async function sendMessage(
   saveSession(session);
   
   try {
+    const requestBody = {
+      sessionId: session.sessionId,
+      message,
+      bookId,
+      enableTrace: true,
+      quizContext, // Pass quiz mode context to backend
+    };
+    
+    // Debug logging - remove after debugging
+    console.log('[AgentService] Sending request to agent:', JSON.stringify(requestBody, null, 2));
+    
     const response = await fetch(`${BASE_URL}/agent/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        sessionId: session.sessionId,
-        message,
-        bookId,
-        enableTrace: true,
-        quizContext, // Pass quiz mode context to backend
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

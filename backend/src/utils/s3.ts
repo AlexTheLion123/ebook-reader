@@ -23,3 +23,8 @@ export const putObject = async (bucket: string, key: string, body: Buffer | stri
   });
   await client.send(command);
 };
+
+export const getPresignedUrl = async (bucket: string, key: string, expiresIn: number = 3600): Promise<string> => {
+  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+  return getSignedUrl(client, command, { expiresIn });
+};

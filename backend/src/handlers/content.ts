@@ -1,6 +1,6 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { queryItems, getItem } from '../utils/dynamodb';
-import { getObject } from '../utils/s3';
+import { getObject, getPresignedUrl } from '../utils/s3';
 
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
@@ -21,7 +21,20 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         if (item.s3Key) {
           try {
             const contentBuffer = await getObject(process.env.BOOKS_BUCKET!, item.s3Key);
-            item.content = contentBuffer.toString('utf-8');
+            let content = contentBuffer.toString('utf-8');
+            
+            // Replace S3 image URLs with presigned URLs
+            const bucket = process.env.BOOKS_BUCKET!;
+            const imageRegex = new RegExp(`https://${bucket}\.s3\.[^/]+\.amazonaws\.com/(books/${bookId}/images/[^"'\s]+)`, 'g');
+            const matches = [...content.matchAll(imageRegex)];
+            
+            for (const match of matches) {
+              const imageKey = match[1];
+              const presignedUrl = await getPresignedUrl(bucket, imageKey, 3600);
+              content = content.replace(match[0], presignedUrl);
+            }
+            
+            item.content = content;
           } catch (e) {
             console.error(`Failed to fetch content from S3 for ${item.s3Key}`, e);
             item.content = 'Error loading content';

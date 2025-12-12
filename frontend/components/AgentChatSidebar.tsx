@@ -26,6 +26,38 @@ import {
   ToolCall
 } from '../services/agentService';
 
+/**
+ * Fix LaTeX that got mangled by Bedrock Agent streaming
+ * Issues: 1) backslashes stripped, 2) extra $ characters from chunk boundaries
+ */
+function fixMangledLatex(text: string): string {
+  let fixed = text;
+  
+  // List of LaTeX commands that commonly lose their backslashes
+  const latexCommands = [
+    'frac', 'sqrt', 'sum', 'prod', 'int', 'lim', 'infty',
+    'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'theta', 'lambda', 'mu', 'pi', 'sigma', 'omega',
+    'cdot', 'times', 'div', 'pm', 'mp', 'leq', 'geq', 'neq', 'approx',
+    'leftarrow', 'rightarrow', 'Leftarrow', 'Rightarrow', 'leftrightarrow',
+    'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'log', 'ln', 'exp',
+    'text', 'textbf', 'textit', 'mathbf', 'mathit', 'mathrm',
+    'left', 'right', 'big', 'Big', 'bigg', 'Bigg',
+    'quad', 'qquad', 'hspace', 'vspace',
+    'overline', 'underline', 'hat', 'bar', 'vec', 'dot', 'ddot',
+    'partial', 'nabla', 'forall', 'exists', 'in', 'notin', 'subset', 'supset',
+    'cup', 'cap', 'setminus', 'emptyset',
+    'binom', 'choose'
+  ];
+  
+  // Fix commands that appear without backslash
+  for (const cmd of latexCommands) {
+    const pattern = new RegExp(`(?<!\\\\)(${cmd})\\{`, 'g');
+    fixed = fixed.replace(pattern, `\\${cmd}{`);
+  }
+  
+  return fixed;
+}
+
 interface AgentChatSidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -377,7 +409,7 @@ export const AgentChatSidebar: React.FC<AgentChatSidebarProps> = ({
                       },
                     }}
                   >
-                    {msg.content}
+                    {fixMangledLatex(msg.content)}
                   </ReactMarkdown>
                   {renderToolCalls(msg.toolCalls)}
                   {renderKBResults(msg.knowledgeBaseResults)}

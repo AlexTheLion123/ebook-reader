@@ -1,0 +1,88 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "QuickBook Tutoring Tools API",
+    "version": "1.0.0",
+    "description": "Action group tools for the QuickBook AI tutor"
+  },
+  "paths": {
+    "/getChapterSummary": {
+      "post": {
+        "summary": "Get a pre-generated summary for a specific chapter",
+        "description": "Retrieves cached chapter summary from DynamoDB. Use this when user asks for chapter overview or summary.",
+        "operationId": "getChapterSummary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chapterNumber": {
+                    "type": "integer",
+                    "description": "The chapter number to summarize"
+                  }
+                },
+                "required": ["chapterNumber"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chapter summary retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "chapterNumber": { "type": "integer" },
+                    "summary": { "type": "string" },
+                    "cached": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/getExamQuestion": {
+      "post": {
+        "summary": "Get exam question(s) by number",
+        "description": "Fetches specific exam questions from the current book. Supports hierarchical queries: '6' returns all sub-questions (6.1, 6.2, etc.), '6.1' returns exact question. Use this when user asks about a specific question number like 'explain question 6.1' or 'help with Q6'.",
+        "operationId": "getExamQuestion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "questionNumber": {
+                    "type": "string",
+                    "description": "Question number (e.g., '6', '6.1', '1.1.1')"
+                  }
+                },
+                "required": ["questionNumber"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Question content retrieved",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "description": "Markdown content of the question(s)"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
